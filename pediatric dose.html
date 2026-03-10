@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>雙和醫院 兒科藥劑部 藥物劑量計算器 2025</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a1520; font-family: 'IBM Plex Mono', 'Courier New', monospace; }
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600;700&display=swap');
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useState, useMemo, useCallback } = React;
+
+
+// ─── CIVD 資料庫：每種濃度只存「目標濃度(mcg/mL)」和「每支藥含量(mg or mcg)」
+// drugMgPerUnit: 每支/vial 的含量，單位 mg
+// drugMlPerUnit: 每支/vial 的體積（mL）—用來算 N/S = totalVol - drugVol
+const CIVD_DATA = {
+  amiodarone: {
+    name: "Amiodarone", drug_info: "150 mg/amp，50 mg/mL（3 mL/amp）",
+    loading: "5 mg/kg IV 緩慢推（Max: 300 mg）",
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 150, drugMlPerUnit: 3, unitLabel: "amp",
+    concOptions: [6000, 3000, 1500],
+    dLow: 5, dHigh: 15,
+    neoMaxConc: null,
+    note: "請用 D5W 稀釋，勿用 N/S",
+  },
+  dopamine: {
+    name: "Dopamine", drug_info: "200 mg/amp，40 mg/mL（5 mL/amp）",
+    loading: null,
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 200, drugMlPerUnit: 5, unitLabel: "amp",
+    concOptions: [3200, 1600, 800, 400],
+    dLow: 2, dHigh: 20,
+    neoMaxConc: 1600,
+    note: null,
+  },
+  dobutamine: {
+    name: "Dobutamine", drug_info: "250 mg/vial，12.5 mg/mL（20 mL/vial）",
+    loading: null,
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 250, drugMlPerUnit: 20, unitLabel: "vial",
+    concOptions: [5000, 2000, 1000, 500],
+    dLow: 2, dHigh: 20,
+    neoMaxConc: 2000,
+    note: null,
+  },
+  epinephrine_civd: {
+    name: "Epinephrine CIVD", drug_info: "1 mg/amp，1 mg/mL（1 mL/amp）",
+    loading: null,
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 1, drugMlPerUnit: 1, unitLabel: "amp",
+    concOptions: [700, 600, 500, 250, 200, 100, 60, 10],
+    dLow: 0.1, dHigh: 1.0,
+    neoMaxConc: 60,
+    note: null,
+  },
+  norepinephrine: {
+    name: "Norepinephrine", drug_info: "4 mg/4 mL/vial（4 mL/vial）",
+    loading: null,
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 4, drugMlPerUnit: 4, unitLabel: "vial",
+    concOptions: [128, 100, 64, 32, 16],
+    dLow: 0.1, dHigh: 2.0,
+    neoMaxConc: 100,
+    note: null,
+  },
+  milrinone: {
+    name: "Milrinone", drug_info: "10 mg/amp，1 mg/mL（10 mL/amp）",
+    loading: "50 mcg/kg，over 10–60 min",
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 10, drugMlPerUnit: 10, unitLabel: "amp",
+    concOptions: [800, 400, 200, 100, 50],
+    dLow: 0.25, dHigh: 0.75,
+    neoMaxConc: 200,
+    note: null,
+  },
+  fentanyl_civd: {
+    name: "Fentanyl CIVD", drug_info: "500 mcg/vial，50 mcg/mL（10 mL/vial）",
+    loading: null,
+    unit: "mcg/kg/hr", unitIsHr: true,
+    drugMgPerUnit: 0.5, drugMlPerUnit: 10, unitLabel: "vial",  // 0.5 mg = 500 mcg per vial
+    concOptions: [1, 2, 2.5, 5, 10],
+    dLow: 0.5, dHigh: 3.0,
+    neoMaxConc: null,
+    note: "ECMO 劑量：1–5 mcg/kg/hr",
+    indications: { nicu: "NICU / PICU 呼吸器鎮靜", ecmo: "ECMO" },
+    ecmoDLow: 1, ecmoDHigh: 5,
+  },
+  midazolam_civd: {
+    name: "Midazolam CIVD", drug_info: "5 mg/mL/amp（1 mL/amp = 5 mg/amp）",
+    loading: "新生兒 LD: 0.1 mg/kg；PICU LD: 0.2 mg/kg",
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 5, drugMlPerUnit: 1, unitLabel: "amp",
+    concOptions: [100, 200, 250, 500, 1000],
+    dLow: 0.25, dHigh: 1.0,
+    neoMaxConc: null,
+    note: "NICU 維持: 0.25–1 mcg/kg/min；PICU 維持: 0.5–2 mcg/kg/min；癲癇: 1–18 mcg/kg/min（NICU）/ 1–33.3 mcg/kg/min（PICU）",
+  },
+  alprostadil: {
+    name: "Alprostadil（PGE1）", drug_info: "Prostin VR 500 mcg/mL（0.5 mg/mL），1 mL/vial",
+    loading: "起始: 0.05–0.1 mcg/kg/min；>0.015 mcg/kg/min 較易 Apnea",
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 0.5, drugMlPerUnit: 1, unitLabel: "vial",  // 500 mcg = 0.5 mg
+    concOptions: [20, 10, 5, 2],
+    dLow: 0.003, dHigh: 0.4,
+    neoMaxConc: null,
+    note: "確定 PDA 開後用最低有效劑量（目標 3–5 ng/kg/min）",
+  },
+  cisatracurium: {
+    name: "Cisatracurium（肌鬆）", drug_info: "10 mg/5 mL/Amp（2 mg/mL）",
+    loading: null,
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 10, drugMlPerUnit: 5, unitLabel: "amp",
+    concOptions: [1000, 500, 400, 200],
+    dLow: 1, dHigh: 4,
+    neoMaxConc: null,
+    note: "Max: 10 mcg/kg/min",
+  },
+  isoproterenol: {
+    name: "Isoproterenol ★", drug_info: "0.2 mg/amp（1 mL/amp）",
+    loading: null,
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 0.2, drugMlPerUnit: 1, unitLabel: "amp",
+    concOptions: [64, 32, 16, 10, 8, 4, 2],
+    dLow: 0.05, dHigh: 1.0,
+    neoMaxConc: null,
+    note: null,
+  },
+  lidocaine: {
+    name: "Lidocaine 2%", drug_info: "100 mg/amp，20 mg/mL（5 mL/amp）",
+    loading: null,
+    unit: "mcg/kg/min", unitIsHr: false,
+    drugMgPerUnit: 100, drugMlPerUnit: 5, unitLabel: "amp",
+    concOptions: [8000, 4000, 2000],
+    dLow: 20, dHigh: 50,
+    neoMaxConc: null,
+    note: null,
+  },
+};
+
+// ─── 一般藥物資料庫 ──────────────────────────────────────────────────────────
+const DRUGS = {
+  ampicillin_neo: {
+    name: "Ampicillin（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const ga = gestAge || 35;
+      let gen_dose, gen_freq, bw_note;
+      // Nelson dosing by BW
+      if (bw < 1) { gen_dose = 50; gen_freq = pna <= 14 ? "Q12H" : "Q8H"; bw_note = "BW < 1 kg"; }
+      else if (bw <= 2) { gen_dose = 50; gen_freq = pna <= 7 ? "Q12H" : "Q8H"; bw_note = "BW 1–2 kg"; }
+      else { gen_dose = 50; gen_freq = pna <= 7 ? "Q8H" : "Q6H"; bw_note = "BW > 2 kg"; }
+      // Meningitis by GA
+      const men_freq_early = ga <= 34 ? "Q8H" : "Q8H";
+      const men_freq_late  = ga <= 34 ? "Q6H（75 mg/kg）" : "Q6H（75 mg/kg）";
+      return [
+        { label: "一般感染", dose_per_kg: `${gen_dose} mg/kg`, total: `${(gen_dose*bw).toFixed(1)} mg`, freq: gen_freq, route: "IV / IM", notes: bw_note },
+        { label: "腦膜炎（PNA 0–7/0–14天）", dose_per_kg: "100 mg/kg", total: `${(100*bw).toFixed(0)} mg`, freq: men_freq_early, route: "IV", notes: `GA ≤34wk 早期 Q8H；≥35wk 早期 Q8H` },
+        { label: "腦膜炎（PNA >7/>14天）", dose_per_kg: "75 mg/kg", total: `${(75*bw).toFixed(0)} mg`, freq: men_freq_late, route: "IV", notes: "" },
+        { label: "PNA 29–60天（腦膜炎）", dose_per_kg: "300–400 mg/kg/day", total: `${(300*bw/6).toFixed(0)}–${(400*bw/6).toFixed(0)} mg/dose（Q6H）`, freq: "÷ Q6H", route: "IV", notes: "" },
+      ];
+    }
+  },
+  gentamicin_neo: {
+    name: "Gentamicin（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const ga = gestAge || 28;
+      let dose, freq;
+      if (ga < 30) { dose = 5; freq = pna <= 14 ? "Q48H" : "Q36H"; }
+      else if (ga <= 34) { dose = 5; freq = pna <= 10 ? "Q36H" : "Q24H"; }
+      else { dose = pna <= 7 ? 4 : 5; freq = "Q24H"; }
+      const pca = ga + Math.floor(pna / 7);
+      return [{ label: "一般感染", dose_per_kg: `${dose} mg/kg`, total: `${(dose*bw).toFixed(1)} mg`, freq, route: "IV / IM", notes: `GA ${ga}wk, PCA ${pca}wk；Peak 6–12 mg/L；Trough <2 mg/L` }];
+    }
+  },
+  // ── 新生兒抗生素（進階）──
+  penicillin_g_neo: {
+    name: "Penicillin G（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const ga = gestAge || 35;
+      let gen_dose, gen_freq, men_dose, men_freq;
+      if (ga <= 34) {
+        gen_dose = "5萬 units/kg"; gen_freq = pna <= 7 ? "Q12H" : "Q8H";
+        men_dose = "15萬 units/kg"; men_freq = pna <= 7 ? "Q8H" : "Q6H（12.5萬）";
+      } else {
+        gen_dose = "5萬 units/kg"; gen_freq = pna <= 7 ? "Q12H" : "Q8H";
+        men_dose = "15萬 units/kg"; men_freq = pna <= 7 ? "Q8H" : "Q6H（12.5萬）";
+      }
+      return [
+        { label: "一般感染", dose_per_kg: gen_dose, total: `${(50000*bw).toFixed(0)} units`, freq: gen_freq, route: "IV / IM", notes: `GA ${ga}wk, PNA ${pna}d` },
+        { label: "腦膜炎", dose_per_kg: men_dose, total: `${(150000*bw).toFixed(0)} units`, freq: men_freq, route: "IV", notes: "腦膜炎用量顯著提高" },
+        { label: "先天梅毒/神經梅毒", dose_per_kg: "5萬 units/kg", total: `${(50000*bw).toFixed(0)} units`, freq: "Q6H–Q4H", route: "IV", notes: "" },
+      ];
+    }
+  },
+  oxacillin_neo: {
+    name: "Oxacillin（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const ga = gestAge || 35;
+      let dose, freq;
+      if (ga <= 34) { dose = 25; freq = pna <= 14 ? "Q12H" : "Q8H"; }
+      else { dose = 25; freq = pna <= 7 ? "Q8H" : "Q6H"; }
+      return [
+        { label: "一般感染", dose_per_kg: `${dose} mg/kg`, total: `${(dose*bw).toFixed(1)} mg`, freq, route: "IV / IM", notes: `GA ${ga}wk` },
+        { label: "腦膜炎", dose_per_kg: "50 mg/kg", total: `${(50*bw).toFixed(1)} mg`, freq: ga <= 34 ? (pna <= 14 ? "Q12H" : "Q8H") : (pna <= 7 ? "Q8H" : "Q6H"), route: "IV", notes: "腦膜炎劑量加倍" },
+      ];
+    }
+  },
+  pip_tazo_neo: {
+    name: "Piperacillin-Tazobactam（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const pma = (gestAge || 35) + Math.floor(pna / 7);
+      const dose_pipe = pma <= 30 ? "100 mg pip/kg" : "80 mg pip/kg";
+      const freq = pma <= 30 ? "Q8H" : (pma <= 35 ? "Q6H（或考慮 Q4H 若 MIC↑）" : "Q6H");
+      return [
+        { label: "一般感染", dose_per_kg: dose_pipe, total: `${(100*bw).toFixed(0)}–${(80*bw).toFixed(0)} mg Pipe`, freq, route: "IV", notes: `PMA ${pma}wk；Pipe:Tazo = 8:1，112.5 mg/kg = 100 mg pip + 12.5 mg tazo` },
+        { label: "PNA 29–60 天", dose_per_kg: "240–320 mg pip/kg/day", total: `${(240*bw).toFixed(0)}–${(320*bw).toFixed(0)} mg/day`, freq: "÷ Q8–6H", route: "IV", notes: "可延長輸注 3hr 以改善 PD 達標" },
+      ];
+    }
+  },
+  amoxicillin_neo: {
+    name: "Amoxicillin（新生兒口服）", category: "抗生素（新生兒）",
+    calc: ({ bw, pna }) => [
+      { label: "一般感染 PO（PNA 0–28天）", dose_per_kg: "15 mg/kg", total: `${(15*bw).toFixed(1)} mg`, freq: "Q12H", route: "PO", notes: "新生兒口服首選；無靜脈劑型建議" },
+      { label: "一般感染 PO（PNA 29–60天）", dose_per_kg: "40–45 mg/kg/day", total: `${(40*bw/3).toFixed(0)}–${(45*bw/3).toFixed(0)} mg/dose（Q8H）`, freq: "÷ Q8H（Standard）", route: "PO", notes: "高劑量: 80–90 mg/kg/day ÷ Q12H" },
+    ]
+  },
+  azithromycin_neo: {
+    name: "Azithromycin（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw }) => [
+      { label: "Chlamydia / Pertussis PO", dose_per_kg: "20 mg/kg/day", total: `${(20*bw).toFixed(1)} mg`, freq: "QD × 3 days（Chlamydia）", route: "PO", notes: "百日咳預防/治療: 10 mg/kg/day QD × 5 days" },
+      { label: "PNA 29–60天：非典型肺炎", dose_per_kg: "10 mg/kg", total: `${(10*bw).toFixed(1)} mg`, freq: "QD × 3 days（非典型）", route: "PO", notes: "" },
+    ]
+  },
+  rifampin_neo: {
+    name: "Rifampin（新生兒接觸預防）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge }) => {
+      const ga = gestAge || 35;
+      return [
+        { label: "Hi 流感菌預防 PO", dose_per_kg: "10 mg/kg/day", total: `${(10*bw).toFixed(1)} mg（Max 600 mg）`, freq: "QD × 4 days", route: "PO", notes: `GA ${ga}wk；腦膜炎雙球菌: 5 mg/kg Q12H × 2 days` },
+      ];
+    }
+  },
+  amikacin_neo: {
+    name: "Amikacin（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const ga = gestAge || 28;
+      let dose, freq;
+      if (ga < 30) { dose = 15; freq = pna <= 14 ? "Q48H" : "Q36H"; }
+      else if (ga <= 34) { dose = 15; freq = pna <= 10 ? "Q36H" : "Q24H"; }
+      else { dose = pna <= 7 ? 15 : 18; freq = "Q24H"; }
+      return [{ label: "一般感染", dose_per_kg: `${dose} mg/kg`, total: `${(dose*bw).toFixed(1)} mg`, freq, route: "IV / IM", notes: `GA ${ga}wk；Peak 20–40 mg/L；Trough <7 mg/L` }];
+    }
+  },
+  cefotaxime_neo: {
+    name: "Cefotaxime 三代（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const ga = gestAge || 35;
+      const gen_freq = ga <= 31 ? (pna <= 7 ? "Q12H" : "Q8H") : (pna <= 7 ? "Q12H" : "Q8H");
+      const pna2960 = pna > 28;
+      return [
+        { label: "一般感染（IV/IM）", dose_per_kg: "50 mg/kg", total: `${(50*bw).toFixed(1)} mg`, freq: pna2960 ? "Q6H" : gen_freq, route: "IV / IM", notes: `GA ${ga}wk, PNA ${pna}d；CNS 穿透佳` },
+        { label: "腦膜炎（PNA 0–7天）IV", dose_per_kg: "50 mg/kg Q8H（150 mg/kg/day）", total: `${(50*bw).toFixed(0)} mg/dose`, freq: "Q8H（或主治同意 100 mg/kg/day ÷ Q12H）", route: "IV", notes: "" },
+        { label: "腦膜炎（PNA >7天）IV", dose_per_kg: "50 mg/kg Q6H（200 mg/kg/day）", total: `${(50*bw).toFixed(0)} mg/dose`, freq: "Q6H（或主治同意 150 mg/kg/day ÷ Q8H）", route: "IV", notes: "G(-) meningitis：療程 ≥21 天，首次 negative CSF culture 後 ≥14 天" },
+        ...(pna2960 ? [{ label: "腦膜炎（PNA 29–60天）IV", dose_per_kg: "225–300 mg/kg/day", total: `${(225*bw/4).toFixed(0)}–${(75*bw).toFixed(0)} mg/dose（Q6H）`, freq: "÷ Q6H", route: "IV", notes: "" }] : []),
+      ];
+    }
+  },
+  cefazolin_neo: {
+    name: "Cefazolin 一代（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, pna }) => {
+      const dose = pna <= 14 ? 25 : 50;
+      const freq = pna <= 14 ? "Q12H" : "Q8H";
+      return [{ label: "一般感染", dose_per_kg: `${dose} mg/kg`, total: `${(dose*bw).toFixed(1)} mg`, freq, route: "IV / IM", notes: `PNA ${pna}d；PNA 29–60d: 100–150 mg/kg/day ÷ Q8–6H` }];
+    }
+  },
+  ceftriaxone_neo: {
+    name: "Ceftriaxone 三代（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw }) => [
+      { label: "一般感染", dose_per_kg: "50 mg/kg", total: `${(50*bw).toFixed(1)} mg`, freq: "Q24H", route: "IV / IM", notes: "新生兒≤28天須謹慎，有膽紅素置換風險" },
+      { label: "PNA 29–60天", dose_per_kg: "50–100 mg/kg/day", total: `${(50*bw).toFixed(1)}–${(100*bw).toFixed(1)} mg/day`, freq: "QD 或 ÷ Q12H（CNS）", route: "IV", notes: "" },
+    ]
+  },
+
+  meropenem_neo: {
+    name: "Meropenem（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const ga = gestAge || 28;
+      let gen_dose, men_dose, freq_suffix;
+      if (pna <= 14) { gen_dose = 20; freq_suffix = ga <= 34 ? "Q12H" : "Q12H"; }
+      else { gen_dose = 20; freq_suffix = ga <= 34 ? "Q8H" : "Q8H"; }
+      men_dose = 40;
+      return [
+        { label: "一般感染（MIC <4）", dose_per_kg: `${gen_dose} mg/kg`, total: `${(gen_dose*bw).toFixed(1)} mg`, freq: freq_suffix, route: "IV", notes: `GA ${ga}wk, PNA ${pna}d` },
+        { label: "一般感染（MIC 4–8）", dose_per_kg: "40 mg/kg", total: `${(40*bw).toFixed(1)} mg`, freq: freq_suffix, route: "IV", notes: "可考慮 4hr 延長輸注" },
+        { label: "腦膜炎", dose_per_kg: `${men_dose} mg/kg`, total: `${(men_dose*bw).toFixed(1)} mg`, freq: freq_suffix, route: "IV", notes: "" },
+        { label: "PNA 29–60天", dose_per_kg: "30 mg/kg", total: `${(30*bw).toFixed(1)} mg`, freq: "Q8H", route: "IV", notes: "" },
+      ];
+    }
+  },
+  clindamycin_neo: {
+    name: "Clindamycin（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const pma = (gestAge || 35) + Math.floor(pna / 7);
+      const dose = pma <= 32 ? 5 : pma <= 40 ? 7 : 9;
+      return [{ label: "一般感染", dose_per_kg: `${dose} mg/kg`, total: `${(dose*bw).toFixed(1)} mg`, freq: "Q8H", route: "IV / PO", notes: `PMA ${pma}wk；PNA 29–60d: 10 mg/kg Q8H` }];
+    }
+  },
+  metronidazole_neo: {
+    name: "Metronidazole（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const pma = (gestAge || 35) + Math.floor(pna / 7);
+      const dose = pma <= 33 ? 7.5 : pma <= 40 ? 7.5 : 7.5;
+      const freq = pma <= 33 ? "Q12H" : (pma <= 40 ? "Q8H" : "Q6H or 10 mg/kg Q8H");
+      return [
+        { label: "一般感染", dose_per_kg: `${dose} mg/kg`, total: `${(dose*bw).toFixed(1)} mg`, freq, route: "IV / PO", notes: `PMA ${pma}wk；PNA ≤28d 先給 LD 15 mg/kg；可用於 CNS 感染` },
+        { label: "PNA 29–60天", dose_per_kg: "22.5–30 mg/kg/day", total: `${(22.5*bw/3).toFixed(1)}–${(30*bw/3).toFixed(1)} mg/dose`, freq: "÷ Q8–6H", route: "IV / PO", notes: "" },
+      ];
+    }
+  },
+  linezolid_neo: {
+    name: "Linezolid（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, pna }) => {
+      const dose = pna <= 14 ? 10 : 10;
+      const freq = pna <= 14 ? "Q12H" : "Q8H";
+      return [{ label: "MRSA / VRE", dose_per_kg: `${dose} mg/kg`, total: `${(dose*bw).toFixed(1)} mg`, freq, route: "IV / PO", notes: `PNA 29–60d: 10 mg/kg Q8H` }];
+    }
+  },
+  vancomycin_neo: {
+    name: "Vancomycin（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge }) => {
+      const ga = gestAge || 28;
+      return [
+        { label: "所有病人 Loading", dose_per_kg: "20 mg/kg", total: `${(20*bw).toFixed(1)} mg`, freq: "單次 IVD ≥60 min", route: "IV", notes: "給完 Loading 後依 SCr 調整維持劑量" },
+        { label: "維持（GA ≤28wk, SCr <0.5）", dose_per_kg: "15 mg/kg", total: `${(15*bw).toFixed(1)} mg`, freq: "Q12H", route: "IVD ≥60 min", notes: "依腎功能 Cr 調整" },
+        { label: "維持（GA ≤28wk, SCr 0.5–0.7）", dose_per_kg: "20 mg/kg", total: `${(20*bw).toFixed(1)} mg`, freq: "Q24H", route: "IVD ≥60 min", notes: "" },
+        { label: "維持（GA ≥29wk, SCr <0.7）", dose_per_kg: "15 mg/kg", total: `${(15*bw).toFixed(1)} mg`, freq: "Q12H", route: "IVD ≥60 min", notes: "" },
+        { label: "維持（GA ≥29wk, SCr 0.7–0.9）", dose_per_kg: "20 mg/kg", total: `${(20*bw).toFixed(1)} mg`, freq: "Q24H", route: "IVD ≥60 min", notes: "" },
+        { label: "PNA 29–60天", dose_per_kg: "45–60 mg/kg/day", total: `${(45*bw/4).toFixed(1)}–${(15*bw).toFixed(1)} mg/dose（Q6H）`, freq: "÷ Q8–6H", route: "IVD ≥60 min", notes: "務必 IVD ≥60 min" },
+      ];
+    }
+  },
+  ceftazidime_neo: {
+    name: "Ceftazidime 三代（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      // BW-based dosing for neonates
+      let dose, freq;
+      if (bw < 1) { dose = 50; freq = pna <= 14 ? "Q12H" : "Q8H"; }
+      else if (bw <= 2) { dose = 50; freq = pna <= 7 ? "Q12H" : "Q8H"; }
+      else { dose = 50; freq = pna <= 7 ? "Q12H" : "Q8H"; }
+      return [
+        { label: "一般感染（IV/IM）", dose_per_kg: `${dose} mg/kg`, total: `${(dose*bw).toFixed(1)} mg`, freq, route: "IV / IM", notes: `抗 Pseudomonas；PNA 29–60d: 90–150 mg/kg/day ÷ Q8H` },
+        { label: "腦膜炎", dose_per_kg: "150 mg/kg/day", total: `${(50*bw).toFixed(1)} mg/dose（Q8H）`, freq: "÷ Q8H", route: "IV", notes: "可用於 CNS 感染；嚴重 Pseudomonas: 200–300 mg/kg/day" },
+      ];
+    }
+  },
+  cefepime_neo: {
+    name: "Cefepime 四代（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, gestAge, pna }) => {
+      const ga = gestAge || 35;
+      let dose, freq;
+      if (bw < 1) { dose = 30; freq = "Q12H"; }
+      else if (bw <= 2) { dose = 30; freq = "Q12H"; }
+      else { dose = pna <= 14 ? 50 : 50; freq = pna <= 14 ? "Q12H" : "Q12H"; }
+      return [
+        { label: "一般感染 IV", dose_per_kg: `${dose} mg/kg`, total: `${(dose*bw).toFixed(1)} mg`, freq, route: "IV", notes: `GA ${ga}wk, PNA ${pna}d；PNA 29–60d: 50 mg/kg Q8H；抗 Pseudomonas` },
+        { label: "腦膜炎 / 嚴重感染 IV", dose_per_kg: "50 mg/kg", total: `${(50*bw).toFixed(1)} mg`, freq: pna > 28 ? "Q8H" : "Q12H", route: "IV", notes: "MIC↑ 可考慮延長輸注；PNA 29–60d Max 6 g/day" },
+      ];
+    }
+  },
+  imipenem_neo: {
+    name: "Imipenem/Cilastatin（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, pna }) => [
+      { label: "一般感染 IV（PNA 0–28天）", dose_per_kg: "25 mg/kg", total: `${(25*bw).toFixed(1)} mg`, freq: pna <= 7 ? "Q12H" : "Q8H", route: "IV", notes: `抗 Pseudomonas；PNA ≤7d Q12H；PNA 8–28d Q8H` },
+      { label: "一般感染（PNA 29–60天）", dose_per_kg: "15–25 mg/kg", total: `${(15*bw).toFixed(1)}–${(25*bw).toFixed(1)} mg/dose`, freq: "Q6H", route: "IV", notes: "PNA 29–60d: 15–25 mg/kg Q6H" },
+    ]
+  },
+  amox_clav_neo: {
+    name: "Amoxicillin-Clavulanate（新生兒）", category: "抗生素（新生兒）",
+    calc: ({ bw, pna }) => [
+      { label: "PO（PNA 0–28天）", dose_per_kg: "15 mg amox/kg", total: `${(15*bw).toFixed(1)} mg amox/dose`, freq: "Q12H（PO）", route: "PO", notes: "4:1 formulation；Curam powder 312.5mg/5mL" },
+      { label: "IV（PNA 0–28天）", dose_per_kg: "25 mg amox/kg", total: `${(25*bw).toFixed(1)} mg amox/dose`, freq: "Q12H（IV）", route: "IV", notes: "5:1 formulation Curam 1200 mg/vial" },
+      { label: "PNA 29–60天 PO", dose_per_kg: "40 mg amox/kg/day", total: `${(40*bw/3).toFixed(1)} mg/dose（Q8H）`, freq: "÷ Q8H（PO）", route: "PO", notes: "高劑量: 80–90 mg/kg/day ÷ Q12H" },
+    ]
+  },
+  // ── 兒童抗生素（>60天）──
+  penicillin_g_ped: {
+    name: "Penicillin G 短效（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV/IM", dose_per_kg: "100,000–300,000 units/kg/day", total: `${(100000*bw/4).toFixed(0)}–${(300000*bw/4).toFixed(0)} units/dose（Q6H）`, freq: "÷ Q6–4H", route: "IV / IM", notes: "Max 24 million units/day" },
+      { label: "CNS 感染 IV", dose_per_kg: "300,000 units/kg/day", total: `${(300000*bw/4).toFixed(0)} units/dose（Q6H）`, freq: "÷ Q4H", route: "IV", notes: "Max 24 million units/day；CNS 用最高劑量" },
+    ]
+  },
+  benzathine_penic_ped: {
+    name: "Penicillin G Benzathine 長效（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => {
+      const dose = bw < 27 ? 600000 : 1200000;
+      return [
+        { label: `A 群鏈球菌（${bw < 27 ? "<27 kg" : "≥27 kg"}）`, dose_per_kg: `${(dose/bw).toFixed(0)} units/kg`, total: `${dose.toLocaleString()} units × 1 dose`, freq: "單次 IM", route: "IM", notes: "不可用於急性 CNS 感染；Max 2.4 million units/dose" },
+        { label: "梅毒（早期）IM", dose_per_kg: "50,000 units/kg", total: `${(50000*bw).toFixed(0)} units（Max 2.4M）`, freq: "單次 IM", route: "IM", notes: "晚期梅毒: QW × 3 doses" },
+      ];
+    }
+  },
+  erythromycin_ped: {
+    name: "Erythromycin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "20 mg/kg/day", total: `${(20*bw/4).toFixed(0)} mg/dose（Q6H）`, freq: "÷ Q6H", route: "IV", notes: "Max 4 g/day；IVD >60 min 避免心律不整" },
+      { label: "口服 PO", dose_per_kg: "40–50 mg/kg/day", total: `${(40*bw/3).toFixed(0)}–${(50*bw/3).toFixed(0)} mg/dose（Q8H）`, freq: "÷ TID–QID", route: "PO", notes: "Max 4 g/day" },
+    ]
+  },
+  moxifloxacin_ped: {
+    name: "Moxifloxacin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw, ageYears }) => {
+      const age = ageYears || 10;
+      return age >= 15 ? [
+        { label: "≥15歲 IV/PO", dose_per_kg: "400 mg QD", total: "400 mg", freq: "QD", route: "IV / PO", notes: "無抗 Pseudomonas；MDR-TB 使用劑量" },
+      ] : [
+        { label: `<15歲 IV（${age} 歲）`, dose_per_kg: "10 mg/kg/day", total: `${Math.min(10*bw, 400).toFixed(0)} mg（Max 400 mg）`, freq: "QD", route: "IV", notes: "無抗 Pseudomonas 活性" },
+      ];
+    }
+  },
+  ceftaroline_ped: {
+    name: "Ceftaroline（四代，抗 MRSA）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw, ageYears }) => {
+      const age = ageYears || 5;
+      let cap_dose, ssti_dose;
+      if (age < 2) { cap_dose = "8 mg/kg Q8H"; ssti_dose = "8 mg/kg Q8H"; }
+      else if (bw <= 33) { cap_dose = "12 mg/kg Q8H"; ssti_dose = "12 mg/kg Q8H"; }
+      else { cap_dose = "600 mg Q12H 或 400 mg Q8H"; ssti_dose = "600 mg Q12H"; }
+      return [
+        { label: "CAP 肺炎 IV", dose_per_kg: cap_dose, total: age < 2 ? `${(8*bw).toFixed(0)} mg/dose` : bw <= 33 ? `${(12*bw).toFixed(0)} mg/dose` : "600 mg/dose", freq: age < 2 ? "Q8H" : bw <= 33 ? "Q8H" : "Q12H", route: "IV", notes: "健保：CAP 及 SSTI；需會診感染科；抗 MRSA；無抗 Pseudomonas" },
+        { label: "皮膚軟組織 SSTI IV", dose_per_kg: ssti_dose, total: age < 2 ? `${(8*bw).toFixed(0)} mg/dose` : bw <= 33 ? `${(12*bw).toFixed(0)} mg/dose` : "600 mg/dose", freq: "Q8H", route: "IV", notes: "高劑量（MIC 2–4）: 36 mg/kg Q8H（Max 600 mg）" },
+      ];
+    }
+  },
+  cefoperazone_ped: {
+    name: "Cefoperazone 三代（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV/IM", dose_per_kg: "100–200 mg/kg/day", total: `${(100*bw/2).toFixed(0)}–${(200*bw/2).toFixed(0)} mg/dose（Q12H）`, freq: "÷ Q8–12H", route: "IV / IM", notes: "抗 Pseudomonas" },
+    ]
+  },
+  cefop_sulbactam_ped: {
+    name: "Cefoperazone/Sulbactam（Brosym）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "40–80 mg/kg/day（= 20–40 mg Cefop/kg/day）", total: `${(40*bw/2).toFixed(0)}–${(80*bw/2).toFixed(0)} mg/dose（Q12H）`, freq: "÷ Q12–6H", route: "IV", notes: "CPZ/Sulbactam 1:1 比例" },
+    ]
+  },
+  ampicillin_ped: {
+    name: "Ampicillin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "50–200 mg/kg/day", total: `${(50*bw).toFixed(0)}–${(200*bw).toFixed(0)} mg/day`, freq: "÷ Q6H", route: "IV / IM", notes: "Max 8 g/day" },
+      { label: "腦膜炎 / 心內膜炎 IV", dose_per_kg: "300–400 mg/kg/day", total: `${(300*bw).toFixed(0)}–${(400*bw).toFixed(0)} mg/day`, freq: "÷ Q6H", route: "IV", notes: "Max 12 g/day；CNS 感染用最高劑量" },
+      { label: "口服 PO", dose_per_kg: "50–100 mg/kg/day", total: `${(50*bw).toFixed(0)}–${(100*bw).toFixed(0)} mg/day`, freq: "÷ QID", route: "PO", notes: "Max 2 g/day" },
+    ]
+  },
+  amoxicillin_ped: {
+    name: "Amoxicillin（兒童口服）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "標準劑量 PO", dose_per_kg: "40–45 mg/kg/day", total: `${(40*bw).toFixed(0)}–${(45*bw).toFixed(0)} mg/day`, freq: "÷ Q8H", route: "PO", notes: "" },
+      { label: "高劑量 PO（AOM / 肺炎）", dose_per_kg: "80–90 mg/kg/day", total: `${(80*bw).toFixed(0)}–${(90*bw).toFixed(0)} mg/day`, freq: "÷ Q12H", route: "PO", notes: "Max 4000 mg/day；鏈球菌咽炎: 50 mg/kg/day QD × 10天" },
+    ]
+  },
+  amox_clav_ped: {
+    name: "Amoxicillin-Clavulanate（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "IV（Curam 1200 mg/vial, 5:1）", dose_per_kg: "25 mg amox/kg", total: `${(25*bw).toFixed(1)} mg amox = ${(25*bw*1.2/1000).toFixed(2)} vial`, freq: "Q8H（≥3mo BW≥4kg）；Q12H（<3mo 或 BW<4kg）", route: "IV", notes: "Clavulanic acid Max: 10 mg/kg/day 或 125 mg/dose" },
+      { label: "口服 4:1（Curam 312.5 mg/5 mL）", dose_per_kg: "20–40 mg amox/kg/day", total: `${(20*bw).toFixed(0)}–${(40*bw).toFixed(0)} mg/day`, freq: "÷ TID", route: "PO", notes: "Max: amox 500 mg/dose Q8H = Curam 30 mL/day" },
+      { label: "口服 7:1（Augmentin 91.4 mg/mL）", dose_per_kg: "25–45 mg amox/kg/day", total: `${(25*bw/91.4*10).toFixed(1)}–${(45*bw/91.4*10).toFixed(1)} mL/day（91.4 mg/mL）`, freq: "÷ BID", route: "PO", notes: "CAP >3mo: 90 mg/kg/day ÷ BID" },
+    ]
+  },
+  oxacillin_ped: {
+    name: "Oxacillin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "100–200 mg/kg/day", total: `${(100*bw).toFixed(0)}–${(200*bw).toFixed(0)} mg/day`, freq: "÷ Q6–4H", route: "IV / IM", notes: "Max 12 g/day" },
+    ]
+  },
+  dicloxacillin_ped: {
+    name: "Dicloxacillin（兒童口服）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 PO", dose_per_kg: "12–25 mg/kg/day", total: `${(12*bw).toFixed(0)}–${(25*bw).toFixed(0)} mg/day`, freq: "÷ QID", route: "PO", notes: "Max 250 mg/dose QID" },
+      { label: "骨關節感染 PO", dose_per_kg: "100 mg/kg/day", total: `${(100*bw).toFixed(0)} mg/day`, freq: "÷ QID", route: "PO", notes: "Max 500 mg/dose QID" },
+    ]
+  },
+  pip_tazo_ped: {
+    name: "Piperacillin-Tazobactam（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "240–300 mg pip/kg/day", total: `${(240*bw).toFixed(0)}–${(300*bw).toFixed(0)} mg/day`, freq: "÷ Q8–6H", route: "IV", notes: "Max 16 g pip/day" },
+      { label: "嗜中性球低下發燒", dose_per_kg: "300–400 mg pip/kg/day", total: `${(300*bw).toFixed(0)}–${(400*bw).toFixed(0)} mg/day`, freq: "÷ Q6H", route: "IV", notes: "可延長輸注 3–4hr" },
+    ]
+  },
+  cephalexin_ped: {
+    name: "Cephalexin 一代（口服）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 PO", dose_per_kg: "25–50 mg/kg/day", total: `${(25*bw).toFixed(0)}–${(50*bw).toFixed(0)} mg/day`, freq: "÷ BID–QID", route: "PO", notes: "" },
+      { label: "嚴重感染 PO", dose_per_kg: "75–100 mg/kg/day", total: `${(75*bw).toFixed(0)}–${(100*bw).toFixed(0)} mg/day`, freq: "÷ TID–QID", route: "PO", notes: "" },
+      { label: "骨關節感染 PO", dose_per_kg: "100–150 mg/kg/day", total: `${(100*bw).toFixed(0)}–${(150*bw).toFixed(0)} mg/day`, freq: "÷ TID–QID", route: "PO", notes: "" },
+    ]
+  },
+  cefazolin_ped: {
+    name: "Cefazolin 一代 IV（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "25–100 mg/kg/day", total: `${(25*bw).toFixed(0)}–${(100*bw).toFixed(0)} mg/day`, freq: "÷ Q8H", route: "IV / IM", notes: "Max 6 g/day, 2 g/dose" },
+      { label: "骨感染 IV", dose_per_kg: "150 mg/kg/day", total: `${(150*bw).toFixed(0)} mg/day`, freq: "÷ Q8–6H", route: "IV", notes: "Max 12 g/day" },
+    ]
+  },
+  cefaclor_ped: {
+    name: "Cefaclor 二代（口服）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 PO", dose_per_kg: "20–40 mg/kg/day", total: `${(20*bw).toFixed(0)}–${(40*bw).toFixed(0)} mg/day`, freq: "÷ TID", route: "PO", notes: "Max 1 g/day" },
+    ]
+  },
+  cefuroxime_ped: {
+    name: "Cefuroxime 二代（口服）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 PO", dose_per_kg: "20–30 mg/kg/day", total: `${(20*bw).toFixed(0)}–${(30*bw).toFixed(0)} mg/day`, freq: "÷ BID", route: "PO", notes: "Max 1 g/day" },
+    ]
+  },
+  ceftriaxone_ped: {
+    name: "Ceftriaxone 三代（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "50–75 mg/kg/day", total: `${(50*bw).toFixed(0)}–${(75*bw).toFixed(0)} mg`, freq: "QD", route: "IV / IM", notes: "Max 2 g/day" },
+      { label: "腦膜炎 / 心內膜炎 IV", dose_per_kg: "100 mg/kg/day", total: `${(50*bw).toFixed(0)} mg/dose`, freq: "÷ Q12H", route: "IV", notes: "Max 4 g/day；可用於 CNS 感染" },
+      { label: "急性中耳炎（AOM）", dose_per_kg: "50 mg/kg/day", total: `${(50*bw).toFixed(0)} mg`, freq: "QD × 1–3 天", route: "IV / IM", notes: "Max 1 g/day" },
+    ]
+  },
+  cefotaxime_ped: {
+    name: "Cefotaxime 三代（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "150–180 mg/kg/day", total: `${(150*bw/3).toFixed(0)}–${(180*bw/3).toFixed(0)} mg/dose（Q8H）`, freq: "÷ Q8–6H", route: "IV / IM", notes: "Max 2 g/dose" },
+      { label: "腦膜炎 IV", dose_per_kg: "225–300 mg/kg/day", total: `${(225*bw/4).toFixed(0)}–${(300*bw/4).toFixed(0)} mg/dose（Q6H）`, freq: "÷ Q6H", route: "IV", notes: "Max 12 g/day；可用於 CNS" },
+    ]
+  },
+  ceftazidime_ped: {
+    name: "Ceftazidime 三代（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "90–150 mg/kg/day", total: `${(90*bw/3).toFixed(0)}–${(150*bw/3).toFixed(0)} mg/dose（Q8H）`, freq: "÷ Q8H", route: "IV / IM", notes: "Max 6 g/day；抗 Pseudomonas" },
+      { label: "嚴重 Pseudomonas IV", dose_per_kg: "200–300 mg/kg/day", total: `${(200*bw/3).toFixed(0)}–${(300*bw/3).toFixed(0)} mg/dose`, freq: "÷ Q8H", route: "IV", notes: "Max 12 g/day；可用於 CNS" },
+    ]
+  },
+  cefixime_ped: {
+    name: "Cefixime 三代（口服）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 PO", dose_per_kg: "8 mg/kg/day", total: `${(8*bw).toFixed(0)} mg/day（Max 400 mg）`, freq: "÷ BID 或 QD", route: "PO", notes: "" },
+    ]
+  },
+  cefepime_ped: {
+    name: "Cefepime 四代（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "100 mg/kg/day", total: `${(50*bw).toFixed(0)} mg/dose（Q12H）`, freq: "÷ Q12H", route: "IV / IM", notes: "Max 4 g/day；抗 Pseudomonas" },
+      { label: "腦膜炎 / 嚴重感染", dose_per_kg: "150 mg/kg/day", total: `${(75*bw).toFixed(0)} mg/dose（Q12H）`, freq: "÷ Q12H", route: "IV", notes: "Max 6 g/day；MIC↑ 可考慮延長輸注" },
+    ]
+  },
+  meropenem_ped: {
+    name: "Meropenem（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "20 mg/kg/dose", total: `${(20*bw).toFixed(0)} mg/dose`, freq: "Q8H", route: "IV", notes: "Max 1 g/dose；抗 Pseudomonas" },
+      { label: "腦膜炎 IV", dose_per_kg: "40 mg/kg/dose", total: `${(40*bw).toFixed(0)} mg/dose`, freq: "Q8H", route: "IV", notes: "Max 2 g/dose" },
+    ]
+  },
+  imipenem_ped: {
+    name: "Imipenem/Cilastatin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "60–100 mg/kg/day", total: `${(60*bw).toFixed(0)}–${(100*bw).toFixed(0)} mg/day`, freq: "÷ Q6H", route: "IV", notes: "抗 Pseudomonas" },
+    ]
+  },
+  vancomycin_ped: {
+    name: "Vancomycin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "45–60 mg/kg/day", total: `${(45*bw).toFixed(0)}–${(60*bw).toFixed(0)} mg/day`, freq: "÷ Q6H", route: "IVD ≥60 min", notes: "監測腎功能與尿量" },
+      { label: "嚴重 MRSA IV", dose_per_kg: "60–80 mg/kg/day", total: `${(60*bw).toFixed(0)}–${(80*bw).toFixed(0)} mg/day`, freq: "÷ Q6H", route: "IVD ≥60 min", notes: "嬰幼兒代謝快，可能需達 100–120 mg/kg/day；Max 120 mg/kg/day" },
+    ]
+  },
+  teicoplanin: {
+    name: "Teicoplanin（Targocid）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw, isNeonatal }) => isNeonatal ? [
+      { label: "Loading（≤2月）", dose_per_kg: "16 mg/kg", total: `${(16*bw).toFixed(1)} mg`, freq: "單次，24h 後維持", route: "IVD（新生兒）", notes: "" },
+      { label: "維持（≤2月）", dose_per_kg: "8 mg/kg", total: `${(8*bw).toFixed(1)} mg`, freq: "QD", route: "IVD", notes: "" },
+    ] : [
+      { label: "Loading（2mo–12yr）", dose_per_kg: "10 mg/kg × 3 doses", total: `${(10*bw).toFixed(1)} mg/dose`, freq: "Q12H × 3", route: "IV / IM", notes: "" },
+      { label: "維持（2mo–12yr）", dose_per_kg: "6–10 mg/kg", total: `${(6*bw).toFixed(1)}–${(10*bw).toFixed(1)} mg`, freq: "QD", route: "IV / IM", notes: "" },
+      { label: "Loading（>13yr）", dose_per_kg: "6–12 mg/kg", total: `${(6*bw).toFixed(1)}–${(12*bw).toFixed(1)} mg/dose`, freq: "Q12H × 3–5 doses", route: "IV", notes: "" },
+    ]
+  },
+  clindamycin_ped: {
+    name: "Clindamycin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "20–40 mg/kg/day", total: `${(20*bw).toFixed(0)}–${(40*bw).toFixed(0)} mg/day`, freq: "÷ Q8–6H", route: "IV / IM", notes: "Max 2.7 g/day；抗厭氧菌、CA-MRSA、肺炎球菌" },
+      { label: "一般感染 PO", dose_per_kg: "10–25 mg/kg/day", total: `${(10*bw).toFixed(0)}–${(25*bw).toFixed(0)} mg/day`, freq: "÷ TID", route: "PO", notes: "" },
+      { label: "AOM / CA-MRSA PO", dose_per_kg: "30–40 mg/kg/day", total: `${(30*bw).toFixed(0)}–${(40*bw).toFixed(0)} mg/day`, freq: "÷ TID–QID", route: "PO", notes: "Max 1.8 g/day" },
+    ]
+  },
+  metronidazole_ped: {
+    name: "Metronidazole（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "22.5–40 mg/kg/day", total: `${(22.5*bw/3).toFixed(0)}–${(40*bw/3).toFixed(0)} mg/dose（Q8H）`, freq: "÷ Q8–6H", route: "IV", notes: "可用於 CNS 感染" },
+      { label: "口服 PO", dose_per_kg: "30–50 mg/kg/day", total: `${(30*bw/3).toFixed(0)}–${(50*bw/3).toFixed(0)} mg/dose（Q8H）`, freq: "÷ Q8H", route: "PO", notes: "C. diff: 30 mg/kg/day ÷ Q8H" },
+    ]
+  },
+  azithromycin_ped: {
+    name: "Azithromycin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "AOM 3天療程 PO", dose_per_kg: "10 mg/kg/day", total: `${(10*bw).toFixed(0)} mg/day（Max 500 mg）`, freq: "QD × 3 days", route: "PO", notes: "" },
+      { label: "AOM 5天療程 PO", dose_per_kg: "Day1: 10 mg/kg, Day2–5: 5 mg/kg", total: `Day1: ${(10*bw).toFixed(0)} mg, Day2–5: ${(5*bw).toFixed(0)} mg`, freq: "QD", route: "PO", notes: "" },
+      { label: "CAP / 非典型肺炎 PO", dose_per_kg: "10 mg/kg Day1, 5 mg/kg Day2–5", total: `${(10*bw).toFixed(0)} mg / ${(5*bw).toFixed(0)} mg`, freq: "QD", route: "PO", notes: "" },
+      { label: "鏈球菌咽炎（對Penicillin嚴重過敏）", dose_per_kg: "12 mg/kg/dose", total: `${(12*bw).toFixed(0)} mg/dose（Max 500 mg）`, freq: "QD × 5 days", route: "PO", notes: "" },
+    ]
+  },
+  clarithromycin_ped: {
+    name: "Clarithromycin（兒童口服）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 PO", dose_per_kg: "15 mg/kg/day", total: `${(15*bw/2).toFixed(0)} mg/dose（BID）`, freq: "÷ BID", route: "PO", notes: "Max 1 g/day, 500 mg/dose" },
+    ]
+  },
+  ciprofloxacin_ped: {
+    name: "Ciprofloxacin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "20–30 mg/kg/day", total: `${(20*bw/2).toFixed(0)}–${(30*bw/2).toFixed(0)} mg/dose（Q12H）`, freq: "÷ Q12H", route: "IV", notes: "Max 400 mg/dose, 1200 mg/day；抗 Pseudomonas" },
+      { label: "口服 PO", dose_per_kg: "20–40 mg/kg/day", total: `${(20*bw/2).toFixed(0)}–${(40*bw/2).toFixed(0)} mg/dose（BID）`, freq: "÷ BID", route: "PO", notes: "Max 1.5 g/day" },
+    ]
+  },
+  levofloxacin_ped: {
+    name: "Levofloxacin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw, ageYears }) => {
+      const age = ageYears || 5;
+      return [
+        { label: age < 5 ? "6月–<5歲 IV/PO" : "≥5歲 IV/PO", dose_per_kg: "8–10 mg/kg/dose", total: `${(8*bw).toFixed(0)}–${(10*bw).toFixed(0)} mg/dose`, freq: age < 5 ? "Q12H" : "QD", route: "IV / PO", notes: "Max 750 mg/day；抗 Pseudomonas；可用於 CNS" },
+      ];
+    }
+  },
+  tmp_smx_ped: {
+    name: "TMP-SMX（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV/PO", dose_per_kg: "6–12 mg TMP/kg/day", total: `${(6*bw/2).toFixed(0)}–${(12*bw/2).toFixed(0)} mg TMP/dose（Q12H）`, freq: "÷ Q12H", route: "IV / PO", notes: "Max 160 mg TMP/dose" },
+      { label: "腦膜炎", dose_per_kg: "15–20 mg TMP/kg/day", total: `${(15*bw/4).toFixed(0)}–${(20*bw/4).toFixed(0)} mg TMP/dose（Q6H）`, freq: "÷ Q6–8H", route: "IV", notes: "可用於 CNS 感染" },
+      { label: "PCP 預防", dose_per_kg: "5–10 mg TMP/kg/day", total: `${(5*bw/2).toFixed(0)}–${(10*bw/2).toFixed(0)} mg TMP/dose`, freq: "÷ Q12H BIW–TIW", route: "PO", notes: "" },
+      { label: "UTI 預防", dose_per_kg: "2 mg TMP/kg/day", total: `${(2*bw).toFixed(0)} mg TMP/day`, freq: "QD", route: "PO", notes: "" },
+    ]
+  },
+  linezolid_ped: {
+    name: "Linezolid（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw, ageYears }) => {
+      const age = ageYears || 10;
+      return age < 12 ? [
+        { label: "皮膚軟組織（5–11歲）", dose_per_kg: "20 mg/kg/day", total: `${(10*bw).toFixed(0)} mg/dose（Q12H）`, freq: "÷ Q12H", route: "IV / PO", notes: "" },
+        { label: "MRSA 菌血症（<12歲）", dose_per_kg: "30 mg/kg/day", total: `${(10*bw).toFixed(0)} mg/dose（Q8H）`, freq: "÷ Q8H", route: "IV / PO", notes: "Max 1200 mg/day；可用於 CNS；用藥>10天注意骨髓抑制" },
+      ] : [
+        { label: "≥12歲", dose_per_kg: "1200 mg/day", total: "600 mg/dose", freq: "÷ Q12H", route: "IV / PO", notes: "Max 1200 mg/day" },
+      ];
+    }
+  },
+  daptomycin_ped: {
+    name: "Daptomycin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw, ageYears }) => {
+      const age = ageYears || 10;
+      let dose;
+      if (age < 2) dose = 10; else if (age < 7) dose = 9; else if (age < 12) dose = 7; else dose = 5;
+      const bact_dose = age < 2 ? 12 : age < 7 ? 9 : age < 12 ? 9 : 7;
+      return [
+        { label: `皮膚軟組織感染（${age < 2 ? "1–2歲" : age < 7 ? "2–6歲" : age < 12 ? "7–11歲" : "12–17歲"}）`, dose_per_kg: `${dose} mg/kg/day`, total: `${(dose*bw).toFixed(0)} mg`, freq: "QD", route: "IV", notes: "需會診感染科；<12月禁用；不可用於 CNS" },
+        { label: `S. aureus 菌血症`, dose_per_kg: `${bact_dose} mg/kg/day`, total: `${(bact_dose*bw).toFixed(0)} mg`, freq: "QD", route: "IV", notes: "抗 MRSA；不可用於肺炎" },
+      ];
+    }
+  },
+  amikacin_ped: {
+    name: "Amikacin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "傳統劑量 IV", dose_per_kg: "15–22.5 mg/kg/day", total: `${(15*bw/2).toFixed(0)}–${(22.5*bw/2).toFixed(0)} mg/dose（Q12H）`, freq: "÷ Q12–8H", route: "IV / IM", notes: "Peak 20–40 mg/L；Trough <7 mg/L" },
+      { label: "每日一次（Once daily）", dose_per_kg: "15–22.5 mg/kg", total: `${(15*bw).toFixed(0)}–${(22.5*bw).toFixed(0)} mg`, freq: "QD", route: "IV / IM", notes: "抗 Pseudomonas；肥胖用 adjusted BW" },
+    ]
+  },
+  gentamicin_ped: {
+    name: "Gentamicin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "傳統劑量 IV", dose_per_kg: "6–7.5 mg/kg/day", total: `${(6*bw/3).toFixed(0)}–${(7.5*bw/3).toFixed(0)} mg/dose（Q8H）`, freq: "÷ Q8H", route: "IV / IM", notes: "Peak 6–12 mg/L；Trough <2 mg/L" },
+      { label: "每日一次（Once daily）", dose_per_kg: "5–7.5 mg/kg", total: `${(5*bw).toFixed(0)}–${(7.5*bw).toFixed(0)} mg`, freq: "QD", route: "IV / IM", notes: "" },
+    ]
+  },
+  cefoxitin_ped: {
+    name: "Cefoxitin 二代（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "80–160 mg/kg/day", total: `${(80*bw/4).toFixed(0)}–${(160*bw/4).toFixed(0)} mg/dose（Q6H）`, freq: "÷ Q6–4H", route: "IV", notes: "Max 12 g/day；抗厭氧菌 Bacteroides spp." },
+    ]
+  },
+  cefmetazole_ped: {
+    name: "Cefmetazole 二代（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "25–100 mg/kg/day", total: `${(25*bw/4).toFixed(0)}–${(100*bw/4).toFixed(0)} mg/dose（Q6H）`, freq: "÷ Q12–6H", route: "IV", notes: "抗厭氧菌 Bacteroides spp.（Cetazone）" },
+      { label: "嚴重感染 IV", dose_per_kg: "100–150 mg/kg/day", total: `${(100*bw/4).toFixed(0)}–${(150*bw/4).toFixed(0)} mg/dose`, freq: "÷ Q6H", route: "IV", notes: "" },
+    ]
+  },
+  flomoxef_ped: {
+    name: "Flomoxef（Flumarin）三/四代（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "60–80 mg/kg/day", total: `${(60*bw/3).toFixed(0)}–${(80*bw/3).toFixed(0)} mg/dose（Q8H）`, freq: "÷ Q8H", route: "IV", notes: "抗厭氧菌（Flumarin）；Max 150 mg/kg/day" },
+      { label: "嚴重感染 IV", dose_per_kg: "150 mg/kg/day", total: `${(150*bw/3).toFixed(0)} mg/dose（Q8H）`, freq: "÷ Q8–6H", route: "IV", notes: "" },
+    ]
+  },
+  ceftaz_avi_ped: {
+    name: "Ceftazidime/Avibactam（Zavicefta）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw, ageYears }) => {
+      const age = ageYears || 5;
+      let dose, freq = "Q8H";
+      if (age < 0.25) { dose = "90 mg Ceftaz/22.5 mg Avi/kg/day"; }
+      else if (age < 0.5) { dose = "120 mg Ceftaz/30 mg Avi/kg/day"; }
+      else { dose = "150 mg Ceftaz/37.5 mg Avi/kg/day"; }
+      const ceftaz = age < 0.25 ? 90 : age < 0.5 ? 120 : 150;
+      return [
+        { label: `靜脈 IV（${age < 0.25 ? "<3月" : age < 0.5 ? "3–6月" : "6月–18歲"}）`, dose_per_kg: dose, total: `${(ceftaz*bw/3).toFixed(0)} mg Ceftaz/dose`, freq, route: "IV", notes: "需會診感染科；健保：碳青黴烯抗藥性 G(-) 確認感染；Max 2000 mg Ceftaz/500 mg Avi/dose" },
+      ];
+    }
+  },
+  ertapenem_ped: {
+    name: "Ertapenem（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw, ageYears }) => {
+      const age = ageYears || 5;
+      return age < 13 ? [
+        { label: "1月–12歲 IV", dose_per_kg: "30 mg/kg/day", total: `${(30*bw/2).toFixed(0)} mg/dose（Q12H）`, freq: "÷ Q12H", route: "IV", notes: "Max 500 mg/day；對 Pseudomonas / Acinetobacter 效果差；CNS 穿透差" },
+      ] : [
+        { label: "≥13歲 IV", dose_per_kg: "1000 mg/day", total: "1000 mg", freq: "QD", route: "IV", notes: "Max 1000 mg/day" },
+      ];
+    }
+  },
+  rifampin_ped: {
+    name: "Rifampin（化學預防）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "Hi 流感菌接觸預防 PO", dose_per_kg: "20 mg/kg/day", total: `${Math.min(20*bw, 600).toFixed(0)} mg（Max 600 mg）`, freq: "QD × 4 days", route: "PO", notes: "" },
+      { label: "腦膜炎雙球菌接觸預防 PO", dose_per_kg: "20 mg/kg/day", total: `${Math.min(20*bw, 600).toFixed(0)} mg（Max 600 mg）`, freq: "QD × 2 days", route: "PO", notes: "" },
+    ]
+  },
+  doxycycline_ped: {
+    name: "Doxycycline（兒童，>8歲）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw, ageYears }) => {
+      const age = ageYears || 10;
+      return [
+        { label: "非典型肺炎 PO（≥8歲）", dose_per_kg: "4 mg/kg/day", total: `${(4*bw/2).toFixed(0)} mg/dose（Q12H）（Max 100 mg/dose）`, freq: "÷ Q12H", route: "PO", notes: age < 8 ? "⚠ <8歲不建議使用（牙齒染色風險）" : "比 tetracycline 牙齒染色風險低" },
+      ];
+    }
+  },
+  penicillin_g_benz_ped: {
+    name: "Penicillin G Benzathine（長效）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "A 群鏈球菌 <27 kg IM", dose_per_kg: "600,000 units × 1 dose", total: `${bw < 27 ? "600,000 units" : "1,200,000 units"}（體重決定）`, freq: "單次 IM", route: "IM", notes: "≥27 kg: 1,200,000 units；不可用於急性 CNS 感染" },
+      { label: "梅毒（早期）IM", dose_per_kg: "50,000 units/kg", total: `${Math.min(50000*bw, 2400000).toFixed(0)} units（Max 2,400,000 units）`, freq: "單次 IM", route: "IM", notes: "晚期梅毒：QW × 3 doses" },
+    ]
+  },
+  erythromycin_ped: {
+    name: "Erythromycin（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "靜脈 IV", dose_per_kg: "20 mg/kg/day", total: `${(20*bw/4).toFixed(0)} mg/dose（Q6H）`, freq: "÷ Q6H", route: "IV", notes: "Max 4 g/day；IVD > 60 min（避免心律不整）" },
+      { label: "口服 PO", dose_per_kg: "40–50 mg/kg/day", total: `${(40*bw/3).toFixed(0)}–${(50*bw/3).toFixed(0)} mg/dose（Q8H）`, freq: "÷ TID–QID", route: "PO", notes: "Max 4 g/day" },
+    ]
+  },
+  cefoperazone_ped: {
+    name: "Cefoperazone 三代（兒童）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV/IM", dose_per_kg: "100–200 mg/kg/day", total: `${(100*bw/2).toFixed(0)}–${(200*bw/2).toFixed(0)} mg/dose（Q12H）`, freq: "÷ Q8–12H", route: "IV / IM", notes: "抗 Pseudomonas（Cefzone）" },
+    ]
+  },
+  cefop_sulbactam_ped: {
+    name: "Cefoperazone/Sulbactam（Brosym）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw }) => [
+      { label: "一般感染 IV", dose_per_kg: "40–80 mg/kg/day（= 20–40 mg Cefop/kg/day）", total: `${(40*bw/2).toFixed(0)}–${(80*bw/2).toFixed(0)} mg/dose（Q12H）`, freq: "÷ Q12–6H", route: "IV", notes: "CPZ/Sulbactam 1:1 比例（Brosym 2000 mg/vial）" },
+    ]
+  },
+  minocycline_ped: {
+    name: "Minocycline（>8歲）", category: "抗生素（兒童 >60 天）",
+    calc: ({ bw, ageYears }) => {
+      const age = ageYears || 10;
+      return [
+        { label: `皮膚感染 / CA-MRSA PO（${age >= 8 ? "≥8歲" : "⚠<8歲不建議"}）`, dose_per_kg: "Initial: 4 mg/kg，then 2 mg/kg/dose", total: `Loading: ${Math.min(4*bw,200).toFixed(0)} mg，維持: ${Math.min(2*bw,100).toFixed(0)} mg/dose`, freq: "Q12H", route: "PO", notes: age < 8 ? "⚠ <8歲不建議使用" : "Max 200 mg loading；Max 100 mg/dose 維持" },
+      ];
+    }
+  },
+  epinephrine: {
+    name: "Epinephrine（急救推注）", category: "急救藥物",
+    calc: ({ bw, isNeonatal }) => isNeonatal ? [
+      { label: "IV/IO（新生兒）稀釋 0.1 mg/mL", dose_per_kg: "0.02 mg/kg = 0.2 mL/kg", total: `${(0.02*bw).toFixed(3)} mg = ${(0.2*bw).toFixed(2)} mL`, freq: "必要時", route: "IV Rapid push", notes: "1 amp + 9 mL NS → 0.1 mg/mL" },
+      { label: "ET tube（新生兒）原液 1 mg/mL", dose_per_kg: "0.1 mg/kg = 1 mL/kg", total: `${(0.1*bw).toFixed(2)} mg = ${(1*bw).toFixed(2)} mL`, freq: "必要時", route: "ET tube", notes: "" },
+    ] : [
+      { label: "IV/IO（兒童）稀釋 0.1 mg/mL", dose_per_kg: "0.01 mg/kg = 0.1 mL/kg", total: `${(0.01*bw).toFixed(3)} mg = ${(0.1*bw).toFixed(2)} mL`, freq: "Q3–5 min", route: "IV Rapid push", notes: "1 amp + 9 mL NS → 0.1 mg/mL" },
+      { label: "IM（過敏）原液", dose_per_kg: "0.01 mg/kg", total: `${(0.01*bw).toFixed(3)} mg（Max 0.3 mL）`, freq: "必要時", route: "IM", notes: "" },
+    ]
+  },
+  atropine: {
+    name: "Atropine（急救）", category: "急救藥物",
+    calc: ({ bw }) => [
+      { label: "IV / IO", dose_per_kg: "0.02 mg/kg", total: `${(0.02*bw).toFixed(3)} mg = ${(0.02*bw).toFixed(3)} mL（原液）`, freq: "必要時", route: "IV Rapid push", notes: "" },
+      { label: "ET tube", dose_per_kg: "0.04 mg/kg", total: `${(0.04*bw).toFixed(3)} mg`, freq: "必要時", route: "ET tube", notes: "" },
+    ]
+  },
+  midazolam: {
+    name: "Midazolam（推注）", category: "急救藥物",
+    calc: ({ bw, isNeonatal }) => isNeonatal ? [
+      { label: "插管前 LD（新生兒）", dose_per_kg: "0.05–0.1 mg/kg", total: `${(0.05*bw).toFixed(3)}–${(0.1*bw).toFixed(3)} mg`, freq: "單次 slow 3–5 min", route: "IV / IM", notes: "GA ≤34wk 謹慎；注意低血壓" },
+    ] : [
+      { label: "程序鎮靜", dose_per_kg: "0.05–0.1 mg/kg", total: `${(0.05*bw).toFixed(2)}–${(0.1*bw).toFixed(2)} mg`, freq: "Q2–3 min PRN", route: "IV over 2–3 min", notes: "Max 6 mg" },
+      { label: "RSI 插管前", dose_per_kg: "0.2 mg/kg", total: `${(0.2*bw).toFixed(2)} mg`, freq: "單次", route: "IV slow", notes: "注意低血壓！" },
+    ]
+  },
+  diazepam: {
+    name: "Diazepam（Dupin 癲癇）", category: "急救藥物",
+    calc: ({ bw }) => [
+      { label: "癲癇持續（>30天）", dose_per_kg: "0.15–0.2 mg/kg", total: `${(0.15*bw).toFixed(2)}–${(0.2*bw).toFixed(2)} mg（Max 10 mg）`, freq: "5 min 後可再給 1 次", route: "IV", notes: "新生兒禁用" },
+    ]
+  },
+  levetiracetam: {
+    name: "Levetiracetam（Keppra）", category: "急救藥物",
+    calc: ({ bw, isNeonatal }) => isNeonatal ? [
+      { label: "Loading（新生兒）", dose_per_kg: "20–30 mg/kg", total: `${(20*bw).toFixed(0)}–${(30*bw).toFixed(0)} mg`, freq: "單次", route: "IV", notes: "" },
+      { label: "維持（新生兒）", dose_per_kg: "30–60 mg/kg/day", total: `${(30*bw).toFixed(0)}–${(60*bw).toFixed(0)} mg/day`, freq: "÷ Q12H", route: "IV / PO", notes: "" },
+    ] : [
+      { label: "Loading", dose_per_kg: "20–60 mg/kg", total: `${(20*bw).toFixed(0)}–${(60*bw).toFixed(0)} mg（Max 4500 mg）`, freq: "單次", route: "IV", notes: "" },
+      { label: "維持", dose_per_kg: "20–60 mg/kg/day", total: `${(20*bw).toFixed(0)}–${(60*bw).toFixed(0)} mg/day（Max 3000/dose）`, freq: "÷ Q12H", route: "IV / PO", notes: "" },
+    ]
+  },
+  morphine: {
+    name: "Morphine", category: "止痛/鎮靜",
+    calc: ({ bw, isNeonatal }) => isNeonatal ? [
+      { label: "止痛/插管（新生兒）", dose_per_kg: "0.05–0.1 mg/kg", total: `${(0.05*bw).toFixed(3)}–${(0.1*bw).toFixed(3)} mg`, freq: "Q4–6H PRN", route: "IV slow 3–5 min", notes: "" },
+    ] : [
+      { label: "程序止痛", dose_per_kg: "0.05–0.1 mg/kg", total: `${(0.05*bw).toFixed(2)}–${(0.1*bw).toFixed(2)} mg`, freq: "PRN", route: "IV slow", notes: "5 min 後可追加" },
+      { label: "止痛（>6月）", dose_per_kg: "0.05–0.2 mg/kg", total: `${(0.05*bw).toFixed(2)}–${(0.2*bw).toFixed(2)} mg`, freq: "Q2–4H PRN", route: "IV/IM/SC", notes: "Max: <6yr 4mg，7–12yr 8mg" },
+    ]
+  },
+  fentanyl: {
+    name: "Fentanyl 推注", category: "止痛/鎮靜",
+    calc: ({ bw, isNeonatal }) => isNeonatal ? [
+      { label: "間歇止痛（新生兒）", dose_per_kg: "0.5–4 mcg/kg", total: `${(0.5*bw).toFixed(1)}–${(4*bw).toFixed(1)} mcg`, freq: "Q2–4H PRN", route: "IV slow 3–5 min", notes: "" },
+    ] : [
+      { label: "程序止痛", dose_per_kg: "1–2 mcg/kg", total: `${(1*bw).toFixed(1)}–${(2*bw).toFixed(1)} mcg`, freq: "Q30–60 min PRN", route: "IV slow", notes: "Max 100 mcg（ICU）" },
+    ]
+  },
+  ketamine: {
+    name: "Ketamine", category: "止痛/鎮靜",
+    calc: ({ bw }) => [
+      { label: "程序鎮靜 IV", dose_per_kg: "1–2 mg/kg", total: `${(1*bw).toFixed(2)}–${(2*bw).toFixed(2)} mg`, freq: "必要時", route: "IV over 30–60 sec", notes: "≥3 個月使用" },
+      { label: "程序鎮靜 IM", dose_per_kg: "1–5 mg/kg", total: `${(1*bw).toFixed(2)}–${(5*bw).toFixed(2)} mg`, freq: "必要時", route: "IM", notes: "5–10 min 後可追加" },
+    ]
+  },
+  caffeine: {
+    name: "Caffeine Citrate（Peyona）", category: "新生兒呼吸",
+    calc: ({ bw }) => [
+      { label: "Loading", dose_per_kg: "20 mg/kg（1 mL/kg）", total: `${(20*bw).toFixed(1)} mg = ${(1*bw).toFixed(2)} mL`, freq: "單次 IVD 30 min", route: "IV / PO", notes: "" },
+      { label: "維持", dose_per_kg: "5 mg/kg（0.25 mL/kg）", total: `${(5*bw).toFixed(1)} mg = ${(0.25*bw).toFixed(2)} mL`, freq: "QD（LD 後 24h 始）", route: "IV / PO", notes: "" },
+    ]
+  },
+  dexamethasone: {
+    name: "Dexamethasone（哮吼）", category: "類固醇",
+    calc: ({ bw }) => [{ label: "哮吼", dose_per_kg: "0.6 mg/kg × 1 dose", total: `${Math.min(0.6*bw,10).toFixed(2)} mg（Max 10 mg）`, freq: "單次", route: "PO / IV / IM", notes: "" }]
+  },
+  prednisolone: {
+    name: "Prednisolone（氣喘）", category: "類固醇",
+    calc: ({ bw }) => [{ label: "急性發作", dose_per_kg: "1–2 mg/kg/day", total: `${(1*bw).toFixed(1)}–${(2*bw).toFixed(1)} mg/day（Max 60 mg）`, freq: "÷ Q12H", route: "PO", notes: "" }]
+  },
+  oseltamivir: {
+    name: "Oseltamivir（Tamiflu）", category: "抗病毒藥",
+    calc: ({ bw, gestAge, pna }) => {
+      const pma = gestAge ? gestAge + Math.floor(pna / 7) : 99;
+      if (pma < 38) return [{ label: "PMA <38週", dose_per_kg: "1 mg/kg", total: `${(1*bw).toFixed(2)} mg`, freq: "BID × 5 days", route: "PO", notes: "" }];
+      if (pma < 41) return [{ label: "PMA 38–40週", dose_per_kg: "1.5 mg/kg", total: `${(1.5*bw).toFixed(2)} mg`, freq: "BID × 5 days", route: "PO", notes: "" }];
+      const dose = bw <= 15 ? 30 : bw <= 23 ? 45 : bw <= 40 ? 60 : 75;
+      return [
+        { label: "流感治療", dose_per_kg: `${dose} mg/dose`, total: `${dose} mg`, freq: "BID × 5 days", route: "PO", notes: `BW ${bw} kg → ${dose} mg/dose` },
+        { label: "流感預防", dose_per_kg: `${dose/2} mg QD`, total: `${dose/2} mg`, freq: "QD × 10 days", route: "PO", notes: "" },
+      ];
+    }
+  },
+  acyclovir: {
+    name: "Acyclovir（抗疱疹）", category: "抗病毒藥",
+    calc: ({ bw, isNeonatal }) => isNeonatal ? [
+      { label: "新生兒 HSV", dose_per_kg: "20 mg/kg/dose", total: `${(20*bw).toFixed(1)} mg/dose`, freq: "Q8H × 14–21 天", route: "IV", notes: "PMA <30wk 可 40 mg/kg/day ÷ Q12H" },
+    ] : [
+      { label: "HSV 腦炎（4mo–12yr）", dose_per_kg: "10–15 mg/kg/dose", total: `${(10*bw).toFixed(1)}–${(15*bw).toFixed(1)} mg/dose`, freq: "Q8H × 14–21 天", route: "IV", notes: "" },
+    ]
+  },
+};
+
+const CATEGORIES = [...new Set(Object.values(DRUGS).map(d => d.category))];
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+const S = {
+  page: { minHeight:"100vh", background:"linear-gradient(135deg,#06101f 0%,#0a1830 60%,#060d18 100%)", fontFamily:"'IBM Plex Mono','Courier New',monospace", color:"#d8e8f4", padding:"14px" },
+  card: { background:"rgba(8,20,46,0.9)", border:"1px solid rgba(50,160,240,0.22)", borderRadius:10, padding:"16px 18px", marginBottom:14 },
+  label: { fontSize:13, color:"#4a6a88", letterSpacing:1.8, display:"block", marginBottom:4, textTransform:"uppercase" },
+  input: { width:"100%", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(50,160,240,0.22)", borderRadius:6, color:"#d8e8f4", padding:"8px 10px", fontSize:17, outline:"none", boxSizing:"border-box", fontFamily:"inherit" },
+  sectionTitle: { fontSize:13, color:"#32a0f0", letterSpacing:4, marginBottom:12, textTransform:"uppercase" },
+  tag: a => ({ padding:"4px 9px", borderRadius:4, border:a?"1px solid #32a0f0":"1px solid rgba(255,255,255,0.08)", background:a?"rgba(50,160,240,0.12)":"transparent", color:a?"#32a0f0":"#506070", fontSize:14, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.5 }),
+  drugBtn: s => ({ padding:"9px 10px", borderRadius:6, border:s?"1px solid #32a0f0":"1px solid rgba(255,255,255,0.07)", background:s?"rgba(50,160,240,0.09)":"rgba(255,255,255,0.01)", color:s?"#b8d8f4":"#607888", fontSize:15, cursor:"pointer", textAlign:"left", fontFamily:"inherit", lineHeight:1.4 }),
+  calcBtn: d => ({ width:"100%", padding:"13px", borderRadius:8, border:"none", background:d?"rgba(50,160,240,0.07)":"linear-gradient(90deg,#015fa0,#32a0f0)", color:d?"#304050":"#fff", fontSize:16, fontWeight:700, cursor:d?"not-allowed":"pointer", letterSpacing:3, fontFamily:"inherit" }),
+  resultRow: { padding:"11px 12px", borderRadius:7, marginBottom:8, background:"rgba(50,160,240,0.04)", border:"1px solid rgba(50,160,240,0.14)" },
+  hl: { background:"rgba(50,160,240,0.1)", border:"1px solid rgba(50,160,240,0.22)", borderRadius:6, padding:"8px 11px" },
+  warn: { marginTop:7, padding:"6px 10px", background:"rgba(255,168,0,0.05)", border:"1px solid rgba(255,168,0,0.2)", borderRadius:6, fontSize:15, color:"#ffcc80", lineHeight:1.6 },
+  pill: s => ({ padding:"5px 11px", borderRadius:20, border:s?"1px solid #32a0f0":"1px solid rgba(255,255,255,0.1)", background:s?"rgba(50,160,240,0.11)":"transparent", color:s?"#7ec8ff":"#506070", fontSize:14, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.5, whiteSpace:"nowrap" }),
+  concBtn: s => ({ padding:"7px 13px", borderRadius:6, border:s?"1px solid #32a0f0":"1px solid rgba(50,160,240,0.2)", background:s?"rgba(50,160,240,0.15)":"rgba(50,160,240,0.04)", color:s?"#7ec8ff":"#506878", fontSize:16, fontWeight:s?700:400, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.5 }),
+};
+
+function App() {
+  const [weight, setWeight] = useState("");
+  const [gestWeeks, setGestWeeks] = useState("");
+  const [pnaDays, setPnaDays] = useState("");
+  const [ageYears, setAgeYears] = useState("");
+  const [tab, setTab] = useState("drug");
+  const [activeCat, setActiveCat] = useState("全部");
+  const [search, setSearch] = useState("");
+  const [selDrug, setSelDrug] = useState("");
+  const [selCivd, setSelCivd] = useState("");
+  const [selConc, setSelConc] = useState(null);
+  const [nsVolume, setNsVolume] = useState("");   // ← 使用者自行輸入 N/S mL
+  const [result, setResult] = useState(null);
+  const [civdResult, setCivdResult] = useState(null);
+
+  const bw = parseFloat(weight) || 0;
+  const isNeo = !!(gestWeeks || pnaDays || (ageYears !== "" && parseFloat(ageYears) < 0.083));
+  const pna = pnaDays ? parseFloat(pnaDays) : ageYears ? parseFloat(ageYears) * 365 : 0;
+  const gestAge = gestWeeks ? parseFloat(gestWeeks) : null;
+
+  const filteredDrugs = useMemo(() =>
+    Object.entries(DRUGS).filter(([,d]) => {
+      const catOk = activeCat === "全部" || d.category === activeCat;
+      const srchOk = !search || d.name.toLowerCase().includes(search.toLowerCase());
+      return catOk && srchOk;
+    }), [activeCat, search]);
+
+  const calculate = () => {
+    if (!selDrug || !bw) return;
+    const rows = DRUGS[selDrug].calc({ bw, gestAge, pna, isNeonatal: isNeo });
+    setResult({ name: DRUGS[selDrug].name, rows });
+  };
+
+  // ─ CIVD 計算核心 ─
+  const civdInfo = selCivd ? CIVD_DATA[selCivd] : null;
+
+  const calcCivd = () => {
+    if (!civdInfo || !bw || !selConc || !nsVolume) return;
+    const totalVol = parseFloat(nsVolume);  // 使用者輸入的總 volume
+    const concMcgMl = selConc;             // 目標濃度 mcg/mL
+    // 需要藥物總量 (mg) = conc(mcg/mL) × totalVol(mL) / 1000
+    const drugMgNeeded = concMcgMl * totalVol / 1000;
+    const unitsNeeded = drugMgNeeded / civdInfo.drugMgPerUnit;
+    const drugVolMl = unitsNeeded * civdInfo.drugMlPerUnit;
+    const nsMl = Math.max(0, totalVol - drugVolMl);
+
+    // 流速
+    const isHr = civdInfo.unitIsHr;
+    const fLow  = isHr ? (civdInfo.dLow  * bw / concMcgMl).toFixed(2) : (civdInfo.dLow  * bw * 60 / concMcgMl).toFixed(2);
+    const fHigh = isHr ? (civdInfo.dHigh * bw / concMcgMl).toFixed(2) : (civdInfo.dHigh * bw * 60 / concMcgMl).toFixed(2);
+
+    setCivdResult({ totalVol, concMcgMl, drugMgNeeded, unitsNeeded, drugVolMl, nsMl, fLow, fHigh });
+  };
+
+  // 當選藥物改變，清 conc 和 result
+  const onSelectCivd = (k) => { setSelCivd(k); setSelConc(null); setNsVolume(""); setCivdResult(null); };
+  const onSelectConc = (c) => { setSelConc(c); setCivdResult(null); };
+
+  const neoWarn = civdInfo && civdInfo.neoMaxConc && selConc && selConc > civdInfo.neoMaxConc && isNeo;
+
+  return (
+    <div style={S.page}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+
+        {/* Header */}
+        <div style={{ textAlign:"center", marginBottom:22, paddingBottom:14, borderBottom:"1px solid rgba(50,160,240,0.15)" }}>
+          <div style={{ fontSize:13, letterSpacing:6, color:"#32a0f0", marginBottom:5 }}>雙和醫院 · 兒科藥劑部</div>
+          <h1 style={{ fontSize:24, fontWeight:700, background:"linear-gradient(90deg,#7ec8ff,#fff,#32a0f0)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", margin:0, letterSpacing:2 }}>
+            兒科藥物劑量計算系統
+          </h1>
+          <div style={{ fontSize:13, color:"#304050", marginTop:5, letterSpacing:1 }}>參考雙和醫院 2025 版 · 僅供臨床參考</div>
+          <div style={{ fontSize:17, color:"#4a7a9a", marginTop:6, letterSpacing:2, fontWeight:600 }}>開發者：羅家希</div>
+          <div style={{ fontSize:13, color:"#3a6a7a", marginTop:4, letterSpacing:1 }}>感謝曾如慧藥師提供資料</div>
+        </div>
+
+        {/* Patient Info */}
+        <div style={S.card}>
+          <div style={S.sectionTitle}>▸ 病人資料</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10 }}>
+            {[["體重（kg）*",weight,setWeight,"例：3.2"],["年齡（歲，選填）",ageYears,setAgeYears,"例：0.5"],["妊娠週數 GA（新生兒）",gestWeeks,setGestWeeks,"例：32"],["出生後天數 PNA（新生兒）",pnaDays,setPnaDays,"例：7"]].map(([lbl,val,set,ph]) => (
+              <div key={lbl}><label style={S.label}>{lbl}</label><input type="number" value={val} onChange={e=>set(e.target.value)} placeholder={ph} style={S.input}/></div>
+            ))}
+          </div>
+          {isNeo && <div style={{ marginTop:10, padding:"6px 10px", background:"rgba(50,160,240,0.07)", border:"1px solid rgba(50,160,240,0.22)", borderRadius:6, fontSize:14, color:"#32a0f0", letterSpacing:1 }}>⬡ 新生兒模式已啟用</div>}
+        </div>
+
+        {/* Tab */}
+        <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+          {[["drug","💊 一般藥物劑量"],["civd","🧪 急救 CIVD 泡法"]].map(([k,lbl]) => (
+            <button key={k} onClick={()=>setTab(k)} style={{ flex:1, padding:"11px", borderRadius:8, border:tab===k?"1px solid #32a0f0":"1px solid rgba(255,255,255,0.08)", background:tab===k?"rgba(50,160,240,0.1)":"transparent", color:tab===k?"#7ec8ff":"#506070", fontSize:16, cursor:"pointer", fontFamily:"inherit", letterSpacing:1, fontWeight:tab===k?700:400 }}>{lbl}</button>
+          ))}
+        </div>
+
+        {/* ══ TAB: 一般藥物 ══ */}
+        {tab === "drug" && (
+          <>
+            <div style={S.card}>
+              <div style={S.sectionTitle}>▸ 選擇藥物</div>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="搜尋藥物..." style={{...S.input,marginBottom:10}}/>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:12 }}>
+                {["全部",...CATEGORIES].map(c=><button key={c} onClick={()=>setActiveCat(c)} style={S.tag(activeCat===c)}>{c}</button>)}
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(185px,1fr))", gap:6 }}>
+                {filteredDrugs.map(([k,d])=>(
+                  <button key={k} onClick={()=>{setSelDrug(k);setResult(null);}} style={S.drugBtn(selDrug===k)}>
+                    <div style={{ fontSize:13, color:selDrug===k?"#32a0f0":"#304050", marginBottom:2 }}>{d.category}</div>
+                    {d.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button onClick={calculate} disabled={!selDrug||!weight} style={S.calcBtn(!selDrug||!weight)}>⬡ 計算劑量</button>
+            {result && (
+              <div style={{...S.card, marginTop:14, borderColor:"rgba(50,160,240,0.4)"}}>
+                <div style={{ display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:8, marginBottom:14 }}>
+                  <div><div style={S.sectionTitle}>▸ 計算結果</div><div style={{ fontSize:20, fontWeight:700, color:"#b8d8f4" }}>{result.name}</div></div>
+                  <div style={{ textAlign:"right" }}><div style={{ fontSize:13, color:"#406080" }}>體重</div><div style={{ fontSize:28, fontWeight:700, color:"#32a0f0" }}>{weight} <span style={{ fontSize:15, color:"#506070" }}>kg</span></div></div>
+                </div>
+                {result.rows.map((row,i)=>{
+                  const isMeningitis = row.label && (row.label.includes("腦膜炎") || row.label.includes("CNS") || row.label.includes("心內膜炎"));
+                  const isLoading = row.label && (row.label.includes("Loading") || row.label.includes("loading"));
+                  const rowBorderColor = isMeningitis ? "rgba(255,100,100,0.35)" : isLoading ? "rgba(255,180,0,0.35)" : "rgba(50,100,150,0.3)";
+                  const labelColor = isMeningitis ? "#ff8080" : isLoading ? "#ffcc60" : "#32a0f0";
+                  // parse route for badges
+                  const routes = row.route ? row.route.split(/[/,]/).map(r=>r.trim()).filter(Boolean) : [];
+                  const routeBadge = (r) => {
+                    const col = r==="IV"?"#1a6ea8": r==="IM"?"#4a7a28": r==="PO"?"#7a4a98": r.startsWith("IVD")?"#0e5a8a":"#304050";
+                    return <span key={r} style={{ display:"inline-block", padding:"1px 7px", borderRadius:10, background:col, color:"#c8e8ff", fontSize:13, fontWeight:700, marginRight:4, letterSpacing:0.5 }}>{r}</span>;
+                  };
+                  return (
+                  <div key={i} style={{...S.resultRow, borderColor:rowBorderColor, background: isMeningitis?"rgba(255,60,60,0.04)": isLoading?"rgba(255,160,0,0.04)":"rgba(20,40,60,0.4)"}}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:9, flexWrap:"wrap" }}>
+                      {isMeningitis && <span style={{ fontSize:12, padding:"1px 6px", background:"rgba(255,80,80,0.2)", color:"#ff8080", borderRadius:8, fontWeight:700, letterSpacing:1 }}>腦膜炎</span>}
+                      {isLoading && <span style={{ fontSize:12, padding:"1px 6px", background:"rgba(255,160,0,0.2)", color:"#ffcc60", borderRadius:8, fontWeight:700, letterSpacing:1 }}>LOADING</span>}
+                      <div style={{ fontSize:13, color:labelColor, letterSpacing:1.5, fontWeight:600, textTransform:"uppercase", flex:1 }}>{row.label}</div>
+                      <div>{routes.map(r=>routeBadge(r))}</div>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:8 }}>
+                      {[["每 kg 劑量",row.dose_per_kg,false],["實際劑量",row.total,true],["頻次",row.freq,false]].map(([l,v,h])=>(
+                        <div key={l} style={h?S.hl:{}}><div style={{ fontSize:13, color:"#406080", letterSpacing:1, marginBottom:2 }}>{l}</div><div style={{ fontSize:h?14:12, color:h?"#7ec8ff":"#8aa8bc", fontWeight:h?700:400, lineHeight:1.35 }}>{v}</div></div>
+                      ))}
+                    </div>
+                    {row.notes && <div style={S.warn}>⚠ {row.notes}</div>}
+                  </div>
+                  );
+                })}
+                <div style={{ fontSize:13, color:"#203040", marginTop:8 }}>⬡ 僅供參考，請依腎功能及臨床狀況調整。</div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ══ TAB: CIVD 泡法 ══ */}
+        {tab === "civd" && (
+          <>
+            {/* Step 1: 選藥物 */}
+            <div style={S.card}>
+              <div style={S.sectionTitle}>① 選擇急救藥物</div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
+                {Object.entries(CIVD_DATA).map(([k,d])=>(
+                  <button key={k} onClick={()=>onSelectCivd(k)} style={S.pill(selCivd===k)}>{d.name}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Step 2: 藥物資訊 + 選濃度 */}
+            {civdInfo && (
+              <div style={S.card}>
+                <div style={{ fontSize:18, fontWeight:700, color:"#7ec8ff", marginBottom:4 }}>{civdInfo.name}</div>
+                <div style={{ fontSize:15, color:"#506878", marginBottom: civdInfo.loading?8:12 }}>{civdInfo.drug_info}</div>
+                {civdInfo.loading && (
+                  <div style={{ fontSize:15, color:"#ffcc80", padding:"6px 10px", background:"rgba(255,168,0,0.05)", border:"1px solid rgba(255,168,0,0.2)", borderRadius:6, marginBottom:12 }}>
+                    Loading：{civdInfo.loading}
+                  </div>
+                )}
+                <div style={S.sectionTitle}>② 選擇目標濃度（mcg/mL）</div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
+                  {civdInfo.concOptions.map(c => {
+                    const isNeoOver = civdInfo.neoMaxConc && c > civdInfo.neoMaxConc && isNeo;
+                    return (
+                      <button key={c} onClick={()=>onSelectConc(c)} style={{
+                        ...S.concBtn(selConc===c),
+                        border: isNeoOver ? "1px solid rgba(255,100,100,0.4)" : selConc===c ? "1px solid #32a0f0" : "1px solid rgba(50,160,240,0.2)",
+                        color: isNeoOver ? "#ff9090" : selConc===c ? "#7ec8ff" : "#506878",
+                        position:"relative",
+                      }}>
+                        {c.toLocaleString()}
+                        {isNeoOver && <span style={{ fontSize:12, color:"#ff7070", display:"block", marginTop:1 }}>超新生兒上限</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                {neoWarn && (
+                  <div style={{ ...S.warn, marginTop:10 }}>
+                    ⚠ 新生兒濃度上限為 {civdInfo.neoMaxConc.toLocaleString()} mcg/mL，目前選擇超過建議範圍
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 3: 輸入 N/S 量 */}
+            {selConc && civdInfo && (
+              <div style={S.card}>
+                <div style={S.sectionTitle}>③ 輸入稀釋液總體積（mL）</div>
+                <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                  <div style={{ flex:1, minWidth:160 }}>
+                    <label style={S.label}>N/S（或 D5W）加至總體積（mL）</label>
+                    <input
+                      type="number"
+                      value={nsVolume}
+                      onChange={e=>{ setNsVolume(e.target.value); setCivdResult(null); }}
+                      placeholder="例：50"
+                      style={S.input}
+                    />
+                  </div>
+                  {/* Quick preset buttons */}
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:16 }}>
+                    {[10,25,50,100,250].map(v=>(
+                      <button key={v} onClick={()=>{ setNsVolume(String(v)); setCivdResult(null); }} style={{
+                        padding:"6px 12px", borderRadius:6, border: nsVolume==v?"1px solid #32a0f0":"1px solid rgba(50,160,240,0.2)",
+                        background: nsVolume==v?"rgba(50,160,240,0.15)":"rgba(50,160,240,0.04)",
+                        color: nsVolume==v?"#7ec8ff":"#506878", fontSize:16, cursor:"pointer", fontFamily:"inherit"
+                      }}>{v} mL</button>
+                    ))}
+                  </div>
+                </div>
+                {civdInfo.note && (
+                  <div style={{ ...S.warn, marginTop:10 }}>⚠ {civdInfo.note}</div>
+                )}
+              </div>
+            )}
+
+            {/* Calculate */}
+            {selConc && civdInfo && (
+              <button onClick={calcCivd} disabled={!bw||!nsVolume} style={S.calcBtn(!bw||!nsVolume)}>
+                ⬡ 計算藥物支數 / N/S 用量 / 流速
+              </button>
+            )}
+
+            {/* Result */}
+            {civdResult && civdInfo && (
+              <div style={{...S.card, marginTop:14, borderColor:"rgba(50,160,240,0.5)"}}>
+                <div style={{ display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:8, marginBottom:18 }}>
+                  <div>
+                    <div style={S.sectionTitle}>▸ 泡藥結果</div>
+                    <div style={{ fontSize:20, fontWeight:700, color:"#b8d8f4" }}>{civdInfo.name}</div>
+                  </div>
+                  <div style={{ textAlign:"right" }}>
+                    <div style={{ fontSize:13, color:"#406080" }}>體重</div>
+                    <div style={{ fontSize:26, fontWeight:700, color:"#32a0f0" }}>{bw} <span style={{ fontSize:15, color:"#506070" }}>kg</span></div>
+                  </div>
+                </div>
+
+                {/* Big 3-column result */}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:14 }}>
+
+                  {/* 藥物量 */}
+                  <div style={{ background:"rgba(50,160,240,0.06)", border:"1px solid rgba(50,160,240,0.25)", borderRadius:10, padding:"14px 16px", textAlign:"center" }}>
+                    <div style={{ fontSize:13, color:"#32a0f0", letterSpacing:2, marginBottom:6 }}>藥物用量</div>
+                    <div style={{ fontSize:32, fontWeight:700, color:"#7ec8ff", lineHeight:1.1 }}>
+                      {civdResult.unitsNeeded % 1 === 0 ? civdResult.unitsNeeded.toFixed(0) : civdResult.unitsNeeded.toFixed(2)}
+                    </div>
+                    <div style={{ fontSize:15, color:"#506878", marginTop:3 }}>{civdInfo.unitLabel}</div>
+                    <div style={{ fontSize:14, color:"#406070", marginTop:4 }}>
+                      = {civdResult.drugMgNeeded < 1
+                        ? `${(civdResult.drugMgNeeded * 1000).toFixed(0)} mcg`
+                        : `${civdResult.drugMgNeeded.toFixed(2)} mg`}
+                    </div>
+                    <div style={{ fontSize:14, color:"#405060", marginTop:2 }}>藥物體積: {civdResult.drugVolMl.toFixed(1)} mL</div>
+                  </div>
+
+                  {/* N/S 量 */}
+                  <div style={{ background:"rgba(0,180,255,0.05)", border:"1px solid rgba(0,180,255,0.22)", borderRadius:10, padding:"14px 16px", textAlign:"center" }}>
+                    <div style={{ fontSize:13, color:"#00c8ff", letterSpacing:2, marginBottom:6 }}>💧 N/S 加入</div>
+                    <div style={{ fontSize:32, fontWeight:700, color:"#00e0ff", lineHeight:1.1 }}>
+                      {civdResult.nsMl.toFixed(1)}
+                    </div>
+                    <div style={{ fontSize:15, color:"#506878", marginTop:3 }}>mL</div>
+                    <div style={{ fontSize:14, color:"#406070", marginTop:4 }}>
+                      總體積: {civdResult.totalVol} mL
+                    </div>
+                    <div style={{ fontSize:14, color:"#406070", marginTop:2 }}>
+                      濃度: {civdResult.concMcgMl.toLocaleString()} mcg/mL
+                    </div>
+                  </div>
+
+                  {/* 流速 */}
+                  <div style={{ background:"rgba(100,255,150,0.04)", border:"1px solid rgba(100,255,150,0.18)", borderRadius:10, padding:"14px 16px", textAlign:"center" }}>
+                    <div style={{ fontSize:13, color:"#64ff96", letterSpacing:2, marginBottom:6 }}>流速範圍</div>
+                    <div style={{ fontSize:22, fontWeight:700, color:"#a0ffc0", lineHeight:1.2 }}>
+                      {civdResult.fLow} – {civdResult.fHigh}
+                    </div>
+                    <div style={{ fontSize:15, color:"#506878", marginTop:3 }}>mL/hr</div>
+                    <div style={{ fontSize:14, color:"#406070", marginTop:4 }}>
+                      劑量: {civdInfo.dLow}–{civdInfo.dHigh} {civdInfo.unit}
+                    </div>
+                    <div style={{ fontSize:14, color:"#406070", marginTop:2 }}>for {bw} kg</div>
+                  </div>
+                </div>
+
+                {/* Summary sentence */}
+                <div style={{ padding:"12px 14px", background:"rgba(50,160,240,0.06)", border:"1px solid rgba(50,160,240,0.15)", borderRadius:8 }}>
+                  <div style={{ fontSize:13, color:"#32a0f0", letterSpacing:2, marginBottom:7 }}>泡藥步驟</div>
+                  <div style={{ fontSize:16, color:"#9ac8e0", lineHeight:2.0 }}>
+                    1. 取 <span style={{ color:"#7ec8ff", fontWeight:700 }}>
+                      {civdResult.unitsNeeded % 1 === 0 ? civdResult.unitsNeeded.toFixed(0) : civdResult.unitsNeeded.toFixed(2)} {civdInfo.unitLabel}
+                    </span>（= {civdResult.drugVolMl.toFixed(1)} mL）<br/>
+                    2. 加入 <span style={{ color:"#00e0ff", fontWeight:700 }}>{civdResult.nsMl.toFixed(1)} mL</span> {civdInfo.name === "Amiodarone" ? "D5W" : "N/S"}<br/>
+                    3. 總體積 <span style={{ color:"#fff", fontWeight:700 }}>{civdResult.totalVol} mL</span>，濃度 <span style={{ color:"#32a0f0", fontWeight:700 }}>{civdResult.concMcgMl.toLocaleString()} mcg/mL</span><br/>
+                    4. 流速設定 <span style={{ color:"#a0ffc0", fontWeight:700 }}>{civdResult.fLow} – {civdResult.fHigh} mL/hr</span>（{bw} kg，{civdInfo.dLow}–{civdInfo.dHigh} {civdInfo.unit}）
+                  </div>
+                </div>
+
+                {neoWarn && (
+                  <div style={{ ...S.warn, marginTop:10 }}>
+                    ⚠ 新生兒濃度上限 {civdInfo.neoMaxConc?.toLocaleString()} mcg/mL，目前 {civdResult.concMcgMl.toLocaleString()} mcg/mL 超出建議範圍
+                  </div>
+                )}
+                {civdInfo.note && (
+                  <div style={{ ...S.warn, marginTop:8 }}>⚠ {civdInfo.note}</div>
+                )}
+
+                <div style={{ fontSize:13, color:"#1c2a38", marginTop:10, lineHeight:1.7 }}>
+                  ⬡ 本結果僅供參考，請依藥物仿單及臨床狀況調整。來源：雙和醫院兒科藥劑部 2025 版。
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
+        * { box-sizing: border-box; }
+        input::placeholder { color: #1e2e3e; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(50,160,240,0.3); border-radius: 2px; }
+      `}</style>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+  </script>
+</body>
+</html>
