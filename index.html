@@ -83,6 +83,12 @@ input:focus{border-color:#32a0f0}
 .no-result{color:#304050;font-size:14px;text-align:center;padding:20px}
 @media(max-width:480px){.drug-grid{grid-template-columns:1fr 1fr}.dose-grid{grid-template-columns:1fr 1fr}}
 </style>
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="theme-color" content="#0a1520"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="兒科劑量"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
 </head>
 <body>
 <div id="app"></div>
@@ -1207,6 +1213,15 @@ function render() {
 }
 
 render();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(r => {
+      console.log('SW registered');
+    }).catch(e => console.log('SW failed:', e));
+  });
+}
 </script>
 </body>
 </html>
