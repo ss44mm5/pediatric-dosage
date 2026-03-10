@@ -4,94 +4,86 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>兒科藥物劑量計算器 2025</title>
+<link rel="manifest" href="manifest.json"/>
+<meta name="theme-color" content="#0a1520"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="兒科劑量"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0a1520;font-family:'Courier New',monospace;color:#8aa8bc;min-height:100vh;padding:12px}
 h1{font-size:22px;font-weight:700;background:linear-gradient(90deg,#7ec8ff,#fff,#32a0f0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px}
 .header{text-align:center;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid rgba(50,160,240,0.15)}
-.header .sub{font-size:13px;color:#304050;margin-top:5px;letter-spacing:1px}
-.header .dev{font-size:15px;color:#4a7a9a;margin-top:6px;letter-spacing:2px;font-weight:600}
-.header .thanks{font-size:13px;color:#3a6a7a;margin-top:4px;letter-spacing:1px}
-.header .hosp{font-size:13px;letter-spacing:6px;color:#32a0f0;margin-bottom:5px}
+.hosp{font-size:13px;letter-spacing:6px;color:#32a0f0;margin-bottom:5px}
+.sub{font-size:13px;color:#304050;margin-top:5px}
+.dev{font-size:15px;color:#4a7a9a;margin-top:6px;letter-spacing:2px;font-weight:600}
+.thanks{font-size:13px;color:#3a6a7a;margin-top:4px}
 .card{background:rgba(15,30,50,0.8);border:1px solid rgba(50,100,150,0.3);border-radius:10px;padding:14px;margin-bottom:12px}
-.section-title{font-size:13px;letter-spacing:3px;color:#406080;margin-bottom:10px;text-transform:uppercase}
-input[type=number],input[type=text]{background:rgba(20,50,80,0.5);border:1px solid rgba(50,100,150,0.4);color:#8aa8bc;padding:8px 10px;border-radius:6px;font-family:inherit;font-size:14px;width:100%;outline:none}
-input:focus{border-color:#32a0f0}
-.input-group{margin-bottom:10px}
-.input-group label{font-size:13px;color:#406080;letter-spacing:1.5px;display:block;margin-bottom:4px;text-transform:uppercase}
-.tabs{display:flex;gap:6px;margin-bottom:14px}
-.tab{flex:1;padding:10px;border:1px solid rgba(50,100,150,0.3);border-radius:8px;background:rgba(15,30,50,0.6);color:#406080;font-family:inherit;font-size:14px;cursor:pointer;letter-spacing:1px}
-.tab.active{background:rgba(50,160,240,0.12);border-color:rgba(50,160,240,0.5);color:#32a0f0}
-.drug-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:6px;margin-top:8px}
-.drug-btn{background:rgba(20,40,60,0.5);border:1px solid rgba(50,100,150,0.25);color:#7a9ab0;padding:8px 10px;border-radius:7px;font-family:inherit;font-size:14px;cursor:pointer;text-align:left;line-height:1.35}
-.drug-btn:hover{border-color:rgba(50,160,240,0.4);color:#32a0f0}
-.drug-btn.selected{background:rgba(50,160,240,0.12);border-color:rgba(50,160,240,0.6);color:#7ec8ff}
-.drug-btn .cat{font-size:12px;color:#304050;margin-bottom:2px}
-.drug-btn.selected .cat{color:#32a0f0}
-.tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+.sec{font-size:13px;letter-spacing:3px;color:#406080;margin-bottom:10px;text-transform:uppercase}
+.ig{margin-bottom:10px}
+.ig label{font-size:13px;color:#406080;letter-spacing:1.5px;display:block;margin-bottom:4px;text-transform:uppercase}
+input{background:rgba(20,50,80,0.5);border:1px solid rgba(50,100,150,0.4);color:#c0d8e8;padding:9px 10px;border-radius:6px;font-family:inherit;font-size:15px;width:100%;outline:none}
+input:focus{border-color:#32a0f0;background:rgba(20,50,80,0.8)}
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tab{flex:1;padding:10px;border:1px solid rgba(50,100,150,0.3);border-radius:8px;background:rgba(15,30,50,0.6);color:#406080;font-family:inherit;font-size:14px;cursor:pointer}
+.tab.on{background:rgba(50,160,240,0.12);border-color:rgba(50,160,240,0.5);color:#32a0f0}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;margin-top:8px}
+.dbtn{background:rgba(20,40,60,0.5);border:1px solid rgba(50,100,150,0.25);color:#7a9ab0;padding:8px 10px;border-radius:7px;font-family:inherit;font-size:14px;cursor:pointer;text-align:left;line-height:1.35;width:100%}
+.dbtn:active,.dbtn.on{background:rgba(50,160,240,0.12);border-color:rgba(50,160,240,0.6);color:#7ec8ff}
+.dcat{font-size:12px;color:#304050;margin-bottom:2px}
+.dbtn.on .dcat{color:#32a0f0}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
 .tag{padding:4px 10px;border-radius:10px;font-size:13px;border:1px solid rgba(50,100,150,0.3);color:#406080;background:rgba(15,30,50,0.5);cursor:pointer;font-family:inherit}
-.tag.active{background:rgba(50,160,240,0.15);border-color:rgba(50,160,240,0.5);color:#32a0f0}
-.calc-btn{width:100%;padding:12px;background:rgba(50,160,240,0.12);border:1px solid rgba(50,160,240,0.4);color:#32a0f0;font-family:inherit;font-size:16px;border-radius:8px;cursor:pointer;letter-spacing:2px;margin-top:4px}
-.calc-btn:disabled{opacity:0.3;cursor:not-allowed}
-.calc-btn:hover:not(:disabled){background:rgba(50,160,240,0.2)}
-.result-card{background:rgba(15,30,50,0.8);border:1px solid rgba(50,160,240,0.4);border-radius:10px;padding:14px;margin-top:14px}
-.result-name{font-size:16px;font-weight:700;color:#b8d8f4}
-.result-weight{font-size:26px;font-weight:700;color:#32a0f0}
-.result-row{border:1px solid rgba(50,100,150,0.3);border-radius:8px;padding:12px;margin-bottom:8px;background:rgba(20,40,60,0.4)}
-.result-row.meningitis{border-color:rgba(255,100,100,0.35);background:rgba(255,60,60,0.04)}
-.result-row.loading{border-color:rgba(255,180,0,0.35);background:rgba(255,160,0,0.04)}
-.row-label{font-size:13px;letter-spacing:1.5px;color:#32a0f0;font-weight:600;text-transform:uppercase;flex:1}
-.row-label.meningitis{color:#ff8080}
-.row-label.loading{color:#ffcc60}
-.badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:12px;font-weight:700;margin-right:4px;letter-spacing:0.5px;color:#c8e8ff}
-.badge-iv{background:#1a6ea8}
-.badge-im{background:#4a7a28}
-.badge-po{background:#7a4a98}
-.badge-ivd{background:#0e5a8a}
-.badge-men{font-size:11px;padding:1px 6px;background:rgba(255,80,80,0.2);color:#ff8080;border-radius:8px;font-weight:700;letter-spacing:1px}
-.badge-load{font-size:11px;padding:1px 6px;background:rgba(255,160,0,0.2);color:#ffcc60;border-radius:8px;font-weight:700;letter-spacing:1px}
-.row-header{display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap}
-.dose-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
-.dose-item label{font-size:12px;color:#406080;letter-spacing:1px;display:block;margin-bottom:2px}
-.dose-item .val{font-size:14px;color:#8aa8bc;line-height:1.35}
-.dose-item.highlight .val{font-size:16px;color:#7ec8ff;font-weight:700}
+.tag.on{background:rgba(50,160,240,0.15);border-color:rgba(50,160,240,0.5);color:#32a0f0}
+.cbtn{width:100%;padding:12px;background:rgba(50,160,240,0.12);border:1px solid rgba(50,160,240,0.4);color:#32a0f0;font-family:inherit;font-size:16px;border-radius:8px;cursor:pointer;letter-spacing:2px;margin-top:4px}
+.cbtn:disabled{opacity:0.3;cursor:not-allowed}
+.rcard{background:rgba(15,30,50,0.8);border:1px solid rgba(50,160,240,0.4);border-radius:10px;padding:14px;margin-top:14px}
+.rrow{border:1px solid rgba(50,100,150,0.3);border-radius:8px;padding:12px;margin-bottom:8px;background:rgba(20,40,60,0.4)}
+.rrow.men{border-color:rgba(255,100,100,0.35);background:rgba(255,60,60,0.04)}
+.rrow.ld{border-color:rgba(255,180,0,0.35);background:rgba(255,160,0,0.04)}
+.rh{display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap}
+.rlbl{font-size:13px;letter-spacing:1.5px;font-weight:600;text-transform:uppercase;flex:1;color:#32a0f0}
+.rlbl.men{color:#ff8080}
+.rlbl.ld{color:#ffcc60}
+.badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:12px;font-weight:700;margin-right:3px;color:#c8e8ff}
+.biv{background:#1a6ea8}.bim{background:#4a7a28}.bpo{background:#7a4a98}.bivd{background:#0e5a8a}
+.bmen{font-size:11px;padding:1px 6px;background:rgba(255,80,80,0.2);color:#ff8080;border-radius:8px;font-weight:700}
+.bld{font-size:11px;padding:1px 6px;background:rgba(255,160,0,0.2);color:#ffcc60;border-radius:8px;font-weight:700}
+.dgr{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.di label{font-size:12px;color:#406080;display:block;margin-bottom:2px}
+.di .v{font-size:14px;color:#8aa8bc;line-height:1.35}
+.di.hl .v{font-size:16px;color:#7ec8ff;font-weight:700}
 .warn{font-size:13px;color:#6a8a60;background:rgba(50,100,40,0.1);border:1px solid rgba(80,140,60,0.2);border-radius:5px;padding:5px 8px;margin-top:8px}
-.result-footer{font-size:12px;color:#203040;margin-top:8px}
+.rf{font-size:12px;color:#203040;margin-top:8px}
 .pill{padding:7px 14px;border-radius:20px;border:1px solid rgba(50,100,150,0.3);background:rgba(15,30,50,0.5);color:#406080;font-family:inherit;font-size:14px;cursor:pointer}
-.pill.active{background:rgba(50,160,240,0.15);border-color:rgba(50,160,240,0.5);color:#32a0f0}
+.pill.on{background:rgba(50,160,240,0.15);border-color:rgba(50,160,240,0.5);color:#32a0f0}
 .pills{display:flex;flex-wrap:wrap;gap:7px}
-.civd-info{font-size:14px;font-weight:700;color:#7ec8ff;margin-bottom:4px}
-.civd-sub{font-size:13px;color:#506878;margin-bottom:12px}
-.civd-loading{font-size:13px;color:#ffcc80;padding:6px 10px;background:rgba(255,168,0,0.05);border:1px solid rgba(255,168,0,0.2);border-radius:6px;margin-bottom:12px}
-.conc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:7px}
-.conc-btn{border:1px solid rgba(50,100,150,0.3);background:rgba(15,30,50,0.6);color:#406080;padding:8px 10px;border-radius:8px;font-family:inherit;font-size:13px;cursor:pointer;text-align:center}
-.conc-btn.active{background:rgba(50,160,240,0.15);border-color:rgba(50,160,240,0.6);color:#7ec8ff}
-.conc-btn .neo-warn{font-size:11px;color:#ffaa60;display:block;margin-top:2px}
-.preset-btns{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
-.preset-btn{padding:6px 14px;border-radius:14px;border:1px solid rgba(50,100,150,0.3);background:rgba(15,30,50,0.5);color:#406080;font-family:inherit;font-size:14px;cursor:pointer}
-.preset-btn:hover{border-color:rgba(50,160,240,0.5);color:#32a0f0}
-.civd-result{background:rgba(20,60,40,0.2);border:1px solid rgba(50,160,100,0.25);border-radius:8px;padding:12px;margin-top:12px}
-.civd-result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:10px}
-.civd-result-item label{font-size:12px;color:#406080;display:block;margin-bottom:2px}
-.civd-result-item .val{font-size:15px;color:#7ec8ff;font-weight:700}
-.steps{margin-top:8px}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:7px}
+.cc{border:1px solid rgba(50,100,150,0.3);background:rgba(15,30,50,0.6);color:#406080;padding:8px 10px;border-radius:8px;font-family:inherit;font-size:13px;cursor:pointer;text-align:center}
+.cc.on{background:rgba(50,160,240,0.15);border-color:rgba(50,160,240,0.6);color:#7ec8ff}
+.cc .nw{font-size:11px;color:#ffaa60;display:block;margin-top:2px}
+.pbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.pbtn{padding:6px 14px;border-radius:14px;border:1px solid rgba(50,100,150,0.3);background:rgba(15,30,50,0.5);color:#406080;font-family:inherit;font-size:14px;cursor:pointer}
+.pbtn:active{border-color:rgba(50,160,240,0.5);color:#32a0f0}
+.cr{background:rgba(20,60,40,0.2);border:1px solid rgba(50,160,100,0.25);border-radius:8px;padding:12px;margin-top:12px}
+.crg{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:10px}
+.cri label{font-size:12px;color:#406080;display:block;margin-bottom:2px}
+.cri .v{font-size:15px;color:#7ec8ff;font-weight:700}
 .step{font-size:13px;color:#607080;padding:4px 0;border-bottom:1px solid rgba(50,80,100,0.15)}
 .step:last-child{border-bottom:none}
-.step span{color:#32a0f0;font-weight:700;margin-right:6px}
-.neo-mode{font-size:12px;padding:3px 8px;background:rgba(255,140,0,0.1);border:1px solid rgba(255,140,0,0.3);border-radius:10px;color:#ffaa60;margin-left:8px}
-.search{background:rgba(20,50,80,0.5);border:1px solid rgba(50,100,150,0.4);color:#8aa8bc;padding:8px 10px;border-radius:6px;font-family:inherit;font-size:14px;width:100%;outline:none;margin-bottom:10px}
-.no-result{color:#304050;font-size:14px;text-align:center;padding:20px}
-@media(max-width:480px){.drug-grid{grid-template-columns:1fr 1fr}.dose-grid{grid-template-columns:1fr 1fr}}
+.step b{color:#32a0f0;margin-right:6px}
+.neo{font-size:12px;padding:3px 8px;background:rgba(255,140,0,0.1);border:1px solid rgba(255,140,0,0.3);border-radius:10px;color:#ffaa60;margin-left:8px}
+.nores{color:#304050;font-size:14px;text-align:center;padding:20px}
+.ci{font-size:14px;font-weight:700;color:#7ec8ff;margin-bottom:4px}
+.cs{font-size:13px;color:#506878;margin-bottom:12px}
+.cl{font-size:13px;color:#ffcc80;padding:6px 10px;background:rgba(255,168,0,0.05);border:1px solid rgba(255,168,0,0.2);border-radius:6px;margin-bottom:12px}
+@media(max-width:480px){.dgrid{grid-template-columns:1fr 1fr}}
 </style>
-  <link rel="manifest" href="manifest.json"/>
-  <meta name="theme-color" content="#0a1520"/>
-  <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="兒科劑量"/>
-  <link rel="apple-touch-icon" href="icon-192.png"/>
 </head>
 <body>
-<div id="app"></div>
+<div id="root"></div>
 <script>
 const CIVD_DATA = {
   amiodarone: {
@@ -955,166 +947,188 @@ const DRUGS = {
 };
 
 
-const CATEGORIES = [...new Set(Object.values(DRUGS).map(d => d.category))];
 
-// ── State ──
-let state = {
-  weight: '', gestWeeks: '', pnaDays: '', ageYears: '',
-  tab: 'drug',
-  activeCat: '全部', search: '',
-  selDrug: '', result: null,
-  selCivd: '', civdInfo: null, selConc: null, civdVol: '', civdResult: null
-};
+const CATS = [...new Set(Object.values(DRUGS).map(d=>d.category))];
 
-function setState(updates) {
-  Object.assign(state, updates);
-  render();
-}
+// ── State (plain vars, no re-render on input) ──
+let selDrug='', selCivd='', selConc=null, activeCat='全部', lastResult=null;
 
-// ── Helpers ──
-function isNeonatal() {
-  const ag = parseFloat(state.ageYears);
-  const pna = parseFloat(state.pnaDays);
-  return (!ag || ag < 0.17) && (!pna || pna <= 60);
+function neo() {
+  const age = parseFloat(document.getElementById('i-age').value)||0;
+  const pna = parseFloat(document.getElementById('i-pna').value)||0;
+  return (age < 0.17) && (pna <= 60 || pna === 0);
 }
 
 function getPatient() {
   return {
-    bw: parseFloat(state.weight) || 3,
-    gestAge: parseFloat(state.gestWeeks) || 35,
-    pna: parseFloat(state.pnaDays) || 1,
-    ageYears: parseFloat(state.ageYears) || 0,
-    isNeonatal: isNeonatal()
+    bw: parseFloat(document.getElementById('i-wt').value)||3,
+    gestAge: parseFloat(document.getElementById('i-ga').value)||35,
+    pna: parseFloat(document.getElementById('i-pna').value)||1,
+    ageYears: parseFloat(document.getElementById('i-age').value)||0,
+    isNeonatal: neo()
   };
 }
 
+function routeBadges(r) {
+  if(!r) return '';
+  return r.split(/[\/,]/).map(x=>x.trim()).filter(Boolean).map(x=>{
+    const c = x==='IV'?'biv':x==='IM'?'bim':x==='PO'?'bpo':'bivd';
+    return `<span class="badge ${c}">${x}</span>`;
+  }).join('');
+}
+
+// ── Tab switching ──
+function showTab(t) {
+  document.getElementById('tab-drug').className='tab'+(t==='drug'?' on':'');
+  document.getElementById('tab-civd').className='tab'+(t==='civd'?' on':'');
+  document.getElementById('pane-drug').style.display=t==='drug'?'block':'none';
+  document.getElementById('pane-civd').style.display=t==='civd'?'block':'none';
+}
+
+// ── Drug tab ──
+function filterDrugs() {
+  const q = document.getElementById('i-search').value.toLowerCase();
+  document.querySelectorAll('.dbtn').forEach(btn=>{
+    const name = btn.dataset.name.toLowerCase();
+    const cat = btn.dataset.cat;
+    const catOk = activeCat==='全部' || cat===activeCat;
+    const qOk = !q || name.includes(q);
+    btn.style.display = catOk&&qOk ? '' : 'none';
+  });
+}
+
+function setCat(c) {
+  activeCat = c;
+  document.querySelectorAll('.tag').forEach(t=>{
+    t.className = 'tag' + (t.dataset.cat===c?' on':'');
+  });
+  filterDrugs();
+}
+
+function pickDrug(k) {
+  selDrug = k;
+  document.querySelectorAll('.dbtn').forEach(b=>{
+    b.className = 'dbtn' + (b.dataset.key===k?' on':'');
+  });
+  document.getElementById('r-area').innerHTML='';
+}
+
 function calculate() {
-  const drug = DRUGS[state.selDrug];
-  if (!drug || !state.weight) return;
+  if(!selDrug) return;
+  const wt = document.getElementById('i-wt').value;
+  if(!wt) return;
+  const drug = DRUGS[selDrug];
   const rows = drug.calc(getPatient());
-  setState({ result: { name: drug.name, rows } });
+  lastResult = {name:drug.name, rows, weight:wt};
+  showResult();
 }
 
-function onSelectCivd(key) {
-  setState({ selCivd: key, civdInfo: CIVD_DATA[key], selConc: null, civdVol: '', civdResult: null });
+function showResult() {
+  if(!lastResult) return;
+  const {name,rows,weight} = lastResult;
+  let html = `
+  <div class="rcard">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+      <div><div class="sec">▸ 計算結果</div><div style="font-size:16px;font-weight:700;color:#b8d8f4">${name}</div></div>
+      <div style="text-align:right"><div style="font-size:12px;color:#406080">體重</div><div style="font-size:26px;font-weight:700;color:#32a0f0">${weight} <span style="font-size:13px;color:#506070">kg</span></div></div>
+    </div>`;
+  rows.forEach(row=>{
+    const men = row.label&&(row.label.includes('腦膜炎')||row.label.includes('CNS')||row.label.includes('心內膜炎'));
+    const ld = row.label&&(row.label.includes('Loading')||row.label.includes('loading'));
+    html+=`
+    <div class="rrow${men?' men':ld?' ld':''}">
+      <div class="rh">
+        ${men?'<span class="bmen">腦膜炎</span>':''}
+        ${ld?'<span class="bld">LOADING</span>':''}
+        <div class="rlbl${men?' men':ld?' ld':''}">${row.label}</div>
+        <div>${routeBadges(row.route)}</div>
+      </div>
+      <div class="dgr">
+        <div class="di"><label>每 kg 劑量</label><div class="v">${row.dose_per_kg}</div></div>
+        <div class="di hl"><label>實際劑量</label><div class="v">${row.total}</div></div>
+        <div class="di"><label>頻次</label><div class="v">${row.freq}</div></div>
+      </div>
+      ${row.notes?`<div class="warn">⚠ ${row.notes}</div>`:''}
+    </div>`;
+  });
+  html+=`<div class="rf">⬡ 本結果僅供參考，請依藥物仿單及臨床狀況調整。來源：雙和醫院兒科藥劑部 2025版。</div></div>`;
+  document.getElementById('r-area').innerHTML = html;
+  document.getElementById('r-area').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
-function onSelectConc(conc) {
-  setState({ selConc: conc, civdVol: '', civdResult: null });
+// ── CIVD tab ──
+function pickCivd(k) {
+  selCivd=k; selConc=null;
+  document.querySelectorAll('.pill').forEach(p=>p.className='pill'+(p.dataset.k===k?' on':''));
+  const d = CIVD_DATA[k];
+  const bw = parseFloat(document.getElementById('i-wt').value)||0;
+  let ld = d.loading ? `<div class="cl">Loading：${d.loading}${bw?` → ${(parseFloat(d.loading)*bw).toFixed(1)} mg`:''}</div>` : '';
+  let concs = d.concOptions.map(c=>`
+    <button class="cc" data-c="${c}" onclick="pickConc(${c})">
+      ${c} mcg/mL
+      ${d.neoMaxConc&&c>d.neoMaxConc?`<span class="nw">⚠ 新生兒 Max ${d.neoMaxConc}</span>`:''}
+    </button>`).join('');
+  document.getElementById('civd-info').innerHTML=`
+    <div class="ci">${d.name}</div>
+    <div class="cs">${d.drug_info}</div>
+    ${ld}
+    <div class="sec">② 選擇濃度</div>
+    <div class="cgrid">${concs}</div>`;
+  document.getElementById('civd-vol-area').innerHTML='';
+  document.getElementById('civd-result').innerHTML='';
+}
+
+function pickConc(c) {
+  selConc=c;
+  document.querySelectorAll('.cc').forEach(b=>b.className='cc'+(parseFloat(b.dataset.c)===c?' on':''));
+  document.getElementById('civd-vol-area').innerHTML=`
+    <div class="sec" style="margin-top:12px">③ 稀釋液總體積</div>
+    <label style="display:block">
+      <span style="font-size:13px;color:#406080;letter-spacing:1.5px">N/S（或 D5W）加至總體積（mL）</span>
+      <input id="i-civdvol" type="number" placeholder="輸入 mL" style="margin-top:6px" oninput="calcCivd(this.value)"/>
+    </label>
+    <div class="pbtns">
+      ${[10,25,50,100,250].map(v=>`<button class="pbtn" onclick="document.getElementById('i-civdvol').value=${v};calcCivd(${v})">${v} mL</button>`).join('')}
+    </div>`;
+  document.getElementById('civd-result').innerHTML='';
 }
 
 function calcCivd(vol) {
-  const d = state.civdInfo;
-  if (!d || !state.selConc || !vol) return;
-  const totalVol = parseFloat(vol);
-  const conc = state.selConc; // mcg/mL
-  let drugMgNeeded, unitsNeeded, drugVolMl, nsMl, flowLow, flowHigh, steps;
-
-  if (d.unitIsHr) {
-    // mcg/mL already, fentanyl/midazolam style
-    drugMgNeeded = conc * totalVol / 1000;
-  } else {
-    drugMgNeeded = conc * totalVol / 1000;
-  }
-  unitsNeeded = drugMgNeeded / d.drugMgPerUnit;
-  drugVolMl = unitsNeeded * d.drugMlPerUnit;
-  nsMl = totalVol - drugVolMl;
-
-  const bw = parseFloat(state.weight) || 1;
-  const dLow = d.dLow, dHigh = d.dHigh;
-  if (d.unitIsHr) {
-    flowLow = (dLow * bw * 60 / conc).toFixed(2);
-    flowHigh = (dHigh * bw * 60 / conc).toFixed(2);
-  } else {
-    flowLow = (dLow * bw * 60 / conc).toFixed(2);
-    flowHigh = (dHigh * bw * 60 / conc).toFixed(2);
-  }
-
-  steps = [
+  const d = CIVD_DATA[selCivd];
+  if(!d||selConc===null||!vol) return;
+  const totalVol=parseFloat(vol);
+  if(!totalVol) return;
+  const conc=selConc;
+  const drugMgNeeded = conc*totalVol/1000;
+  const unitsNeeded = drugMgNeeded/d.drugMgPerUnit;
+  const drugVolMl = unitsNeeded*d.drugMlPerUnit;
+  const nsMl = totalVol-drugVolMl;
+  const bw = parseFloat(document.getElementById('i-wt').value)||1;
+  const flowLow = (d.dLow*bw*60/conc).toFixed(2);
+  const flowHigh = (d.dHigh*bw*60/conc).toFixed(2);
+  const steps=[
     `取 ${unitsNeeded.toFixed(2)} ${d.unitLabel}（= ${drugVolMl.toFixed(2)} mL）`,
-    `加入 N/S${d.solvent === 'D5W' ? ' 或 D5W' : ''} ${nsMl.toFixed(2)} mL`,
+    `加入 N/S${d.solvent==='D5W'?' 或 D5W':''} ${nsMl.toFixed(2)} mL`,
     `稀釋至總體積 ${totalVol} mL`,
     `最終濃度：${conc} mcg/mL`,
     `流速範圍：${flowLow}–${flowHigh} mL/hr（依體重 ${bw} kg）`
   ];
-
-  setState({
-    civdVol: vol,
-    civdResult: { drugMgNeeded, unitsNeeded, drugVolMl, nsMl, flowLow, flowHigh, steps }
-  });
+  document.getElementById('civd-result').innerHTML=`
+    <div class="cr">
+      <div class="crg">
+        <div class="cri"><label>需要藥量</label><div class="v">${unitsNeeded.toFixed(2)} ${d.unitLabel}</div></div>
+        <div class="cri"><label>藥物體積</label><div class="v">${drugVolMl.toFixed(2)} mL</div></div>
+        <div class="cri"><label>N/S 加入</label><div class="v">${nsMl.toFixed(2)} mL</div></div>
+        <div class="cri"><label>流速範圍</label><div class="v">${flowLow}–${flowHigh} mL/hr</div></div>
+      </div>
+      ${steps.map((s,i)=>`<div class="step"><b>${i+1}.</b>${s}</div>`).join('')}
+    </div>`;
 }
 
-// ── Route badge ──
-function routeBadges(routeStr) {
-  if (!routeStr) return '';
-  return routeStr.split(/[/,]/).map(r => r.trim()).filter(Boolean).map(r => {
-    const cls = r === 'IV' ? 'badge-iv' : r === 'IM' ? 'badge-im' : r === 'PO' ? 'badge-po' : 'badge-ivd';
-    return `<span class="badge ${cls}">${r}</span>`;
-  }).join('');
-}
-
-// ── Render ──
-function updateInput(key, val, extraUpdates) {
-  state[key] = val;
-  if (extraUpdates) Object.assign(state, extraUpdates);
-  // Only re-render non-input parts
-  renderResults();
-  renderNeoMode();
-}
-
-function renderNeoMode() {
-  const el = document.getElementById('neo-mode-badge');
-  if (el) el.style.display = isNeonatal() ? 'inline' : 'none';
-}
-
-function renderResults() {
-  const el = document.getElementById('results-area');
-  if (!el) return;
-  if (!state.result) { el.innerHTML = ''; return; }
-  el.innerHTML = buildResultHTML();
-}
-
-function buildResultHTML() {
-  if (!state.result) return '';
-  return `
-  <div class="result-card">
-    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-      <div><div class="section-title">▸ 計算結果</div><div class="result-name">${state.result.name}</div></div>
-      <div style="text-align:right"><div style="font-size:12px;color:#406080">體重</div><div class="result-weight">${state.weight} <span style="font-size:13px;color:#506070">kg</span></div></div>
-    </div>
-    ${state.result.rows.map(row => {
-      const isMen = row.label && (row.label.includes('腦膜炎') || row.label.includes('CNS') || row.label.includes('心內膜炎'));
-      const isLoad = row.label && (row.label.includes('Loading') || row.label.includes('loading'));
-      return `
-      <div class="result-row ${isMen ? 'meningitis' : isLoad ? 'loading' : ''}">
-        <div class="row-header">
-          ${isMen ? '<span class="badge-men">腦膜炎</span>' : ''}
-          ${isLoad ? '<span class="badge-load">LOADING</span>' : ''}
-          <div class="row-label ${isMen ? 'meningitis' : isLoad ? 'loading' : ''}">${row.label}</div>
-          <div>${routeBadges(row.route)}</div>
-        </div>
-        <div class="dose-grid">
-          <div class="dose-item"><label>每 kg 劑量</label><div class="val">${row.dose_per_kg}</div></div>
-          <div class="dose-item highlight"><label>實際劑量</label><div class="val">${row.total}</div></div>
-          <div class="dose-item"><label>頻次</label><div class="val">${row.freq}</div></div>
-        </div>
-        ${row.notes ? `<div class="warn">⚠ ${row.notes}</div>` : ''}
-      </div>`;
-    }).join('')}
-    <div class="result-footer">⬡ 本結果僅供參考，請依藥物仿單及臨床狀況調整。來源：雙和醫院兒科藥劑部 2025 版。</div>
-  </div>`;
-}
-
-function render() {
-  const bw = parseFloat(state.weight);
-  const neo = isNeonatal();
-  const filtered = Object.entries(DRUGS).filter(([k, d]) => {
-    const catOk = state.activeCat === '全部' || d.category === state.activeCat;
-    const searchOk = !state.search || d.name.toLowerCase().includes(state.search.toLowerCase());
-    return catOk && searchOk;
-  });
-
-  let html = `
+// ── Init ──
+function init() {
+  // Header
+  document.getElementById('root').innerHTML = `
   <div class="header">
     <div class="hosp">雙和醫院 · 兒科藥劑部</div>
     <h1>兒科藥物劑量計算系統</h1>
@@ -1123,138 +1137,64 @@ function render() {
     <div class="thanks">感謝曾如慧藥師提供資料</div>
   </div>
 
-  <!-- Patient Info -->
+  <!-- Patient inputs - rendered once, never re-rendered -->
   <div class="card">
-    <div class="section-title">▸ 病人資料 ${neo ? '<span id="neo-mode-badge" class="neo-mode">🟠 新生兒模式</span>' : '<span id="neo-mode-badge" class="neo-mode" style="display:none">🟠 新生兒模式</span>'}</div>
-    <div id="patient-inputs" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
-      <div class="input-group">
-        <label>體重（kg）</label>
-        <input type="number" id="inp-weight" placeholder="kg" oninput="updateInput('weight',this.value,{result:null})"/>
-      </div>
-      <div class="input-group">
-        <label>年齡（歲）</label>
-        <input type="number" id="inp-age" placeholder="歲" oninput="updateInput('ageYears',this.value,{result:null})"/>
-      </div>
-      <div class="input-group">
-        <label>GA（週）</label>
-        <input type="number" id="inp-ga" placeholder="週" oninput="updateInput('gestWeeks',this.value,{result:null})"/>
-      </div>
-      <div class="input-group">
-        <label>PNA（天）</label>
-        <input type="number" id="inp-pna" placeholder="天" oninput="updateInput('pnaDays',this.value,{result:null})"/>
-      </div>
+    <div class="sec">▸ 病人資料</div>
+    <div class="grid4">
+      <div class="ig"><label>體重（kg）</label><input id="i-wt" type="number" placeholder="kg"/></div>
+      <div class="ig"><label>年齡（歲）</label><input id="i-age" type="number" placeholder="歲"/></div>
+      <div class="ig"><label>GA（週）</label><input id="i-ga" type="number" placeholder="週"/></div>
+      <div class="ig"><label>PNA（天）</label><input id="i-pna" type="number" placeholder="天"/></div>
     </div>
   </div>
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab ${state.tab === 'drug' ? 'active' : ''}" onclick="setState({tab:'drug'})">💊 一般藥物劑量</button>
-    <button class="tab ${state.tab === 'civd' ? 'active' : ''}" onclick="setState({tab:'civd'})">🧪 急救 CIVD 泡法</button>
-  </div>`;
+    <button id="tab-drug" class="tab on" onclick="showTab('drug')">💊 一般藥物劑量</button>
+    <button id="tab-civd" class="tab" onclick="showTab('civd')">🧪 急救 CIVD 泡法</button>
+  </div>
 
-  if (state.tab === 'drug') {
-    html += `
+  <!-- Drug pane -->
+  <div id="pane-drug">
     <div class="card">
-      <div class="section-title">▸ 選擇藥物</div>
-      <input class="search" type="text" placeholder="搜尋藥物..." oninput="updateInput('search',this.value)"/>
+      <div class="sec">▸ 選擇藥物</div>
+      <input id="i-search" type="text" placeholder="搜尋藥物..." style="margin-bottom:10px" oninput="filterDrugs()"/>
       <div class="tags">
-        ${['全部', ...CATEGORIES].map(c => `<button class="tag ${state.activeCat === c ? 'active' : ''}" onclick="setState({activeCat:'${c.replace(/'/g,"\\'")}'})">${c}</button>`).join('')}
+        <button class="tag on" data-cat="全部" onclick="setCat('全部')">全部</button>
+        ${CATS.map(c=>`<button class="tag" data-cat="${c.replace(/'/g,"\\'")}" onclick="setCat('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}
       </div>
-      <div class="drug-grid">
-        ${filtered.length ? filtered.map(([k, d]) => `
-          <button class="drug-btn ${state.selDrug === k ? 'selected' : ''}" onclick="setState({selDrug:'${k}',result:null})">
-            <div class="cat">${d.category}</div>${d.name}
-          </button>`).join('') : '<div class="no-result">查無藥物</div>'}
+      <div class="dgrid">
+        ${Object.entries(DRUGS).map(([k,d])=>`
+          <button class="dbtn" data-key="${k}" data-name="${d.name}" data-cat="${d.category}" onclick="pickDrug('${k}')">
+            <div class="dcat">${d.category}</div>${d.name}
+          </button>`).join('')}
       </div>
     </div>
-    <button class="calc-btn" onclick="calculate()" ${(!state.selDrug || !state.weight) ? 'disabled' : ''}>⬡ 計算劑量</button>
-    <div id="results-area"></div>`;
+    <button class="cbtn" onclick="calculate()">⬡ 計算劑量</button>
+    <div id="r-area"></div>
+  </div>
 
-  }
-  // results rendered separately in results-area div
-}
-
-  if (state.tab === 'civd') {
-    html += `
+  <!-- CIVD pane -->
+  <div id="pane-civd" style="display:none">
     <div class="card">
-      <div class="section-title">① 選擇急救藥物</div>
+      <div class="sec">① 選擇急救藥物</div>
       <div class="pills">
-        ${Object.entries(CIVD_DATA).map(([k, d]) => `
-          <button class="pill ${state.selCivd === k ? 'active' : ''}" onclick="onSelectCivd('${k}')">${d.name}</button>`).join('')}
+        ${Object.entries(CIVD_DATA).map(([k,d])=>`
+          <button class="pill" data-k="${k}" onclick="pickCivd('${k}')">${d.name}</button>`).join('')}
       </div>
-    </div>`;
-
-    if (state.civdInfo) {
-      const d = state.civdInfo;
-      const bw = parseFloat(state.weight) || 0;
-      html += `
-      <div class="card">
-        <div class="civd-info">${d.name}</div>
-        <div class="civd-sub">${d.drug_info}</div>
-        ${d.loading ? `<div class="civd-loading">Loading：${d.loading}${bw ? ` → ${(parseFloat(d.loading)*bw).toFixed(1)} mg` : ''}</div>` : ''}
-        <div class="section-title">② 選擇濃度</div>
-        <div class="conc-grid">
-          ${d.concOptions.map(c => `
-            <button class="conc-btn ${state.selConc === c ? 'active' : ''}" onclick="onSelectConc(${c})">
-              ${c} mcg/mL
-              ${d.neoMaxConc && c > d.neoMaxConc ? `<span class="neo-warn">⚠ 新生兒 Max ${d.neoMaxConc}</span>` : ''}
-            </button>`).join('')}
-        </div>
-      </div>`;
-    }
-
-    if (state.selConc !== null) {
-      html += `
-      <div class="card">
-        <div class="section-title">③ 稀釋液總體積</div>
-        <label class="input-group" style="display:block">
-          <span style="font-size:13px;color:#406080;letter-spacing:1.5px">N/S（或 D5W）加至總體積（mL）</span>
-          <input type="number" placeholder="輸入 mL" oninput="calcCivd(this.value)" style="margin-top:6px"/>
-        </label>
-        <div class="preset-btns">
-          ${[10,25,50,100,250].map(v => `<button class="preset-btn" onclick="document.querySelector('#app input[type=number]:last-of-type').value=${v};calcCivd(${v})">${v} mL</button>`).join('')}
-        </div>
-        ${state.civdResult ? (() => {
-          const r = state.civdResult;
-          const d = state.civdInfo;
-          return `
-        <div class="civd-result">
-          <div class="civd-result-grid">
-            <div class="civd-result-item"><label>需要藥量</label><div class="val">${r.unitsNeeded.toFixed(2)} ${d.unitLabel}</div></div>
-            <div class="civd-result-item"><label>藥物體積</label><div class="val">${r.drugVolMl.toFixed(2)} mL</div></div>
-            <div class="civd-result-item"><label>N/S 加入</label><div class="val">${r.nsMl.toFixed(2)} mL</div></div>
-            <div class="civd-result-item"><label>流速範圍</label><div class="val">${r.flowLow}–${r.flowHigh} mL/hr</div></div>
-          </div>
-          <div class="steps">
-            ${r.steps.map((s, i) => `<div class="step"><span>${i+1}.</span>${s}</div>`).join('')}
-          </div>
-        </div>`;
-        })() : ''}
-      </div>`;
-    }
-  }
-
-  document.getElementById('app').innerHTML = html;
+    </div>
+    <div class="card" id="civd-info"></div>
+    <div class="card" id="civd-vol-wrap" style="display:none"></div>
+    <div id="civd-vol-area"></div>
+    <div id="civd-result"></div>
+  </div>`;
 }
 
-render();
+init();
 
-// After initial render, restore input values
-setTimeout(() => {
-  const ids = ['inp-weight','inp-age','inp-ga','inp-pna'];
-  const keys = ['weight','ageYears','gestWeeks','pnaDays'];
-  ids.forEach((id,i) => {
-    const el = document.getElementById(id);
-    if (el && state[keys[i]]) el.value = state[keys[i]];
-  });
-}, 0);
-</script>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').then(r => {
-      console.log('SW registered');
-    }).catch(e => console.log('SW failed:', e));
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw.js');
   });
 }
 </script>
