@@ -1107,11 +1107,17 @@ function calcCivd(vol) {
   // unitIsHr=true → dLow/dHigh 已是 mcg/kg/hr，不需 ×60
   const flowLow = (d.unitIsHr ? d.dLow*bw/conc : d.dLow*bw*60/conc).toFixed(2);
   const flowHigh = (d.unitIsHr ? d.dHigh*bw/conc : d.dHigh*bw*60/conc).toFixed(2);
+  // 1 mL/hr = ? mcg/kg/unit
+  const perMlHr = d.unitIsHr
+    ? (conc / bw).toFixed(3)           // mcg/kg/hr per 1 mL/hr
+    : (conc / bw / 60).toFixed(4);     // mcg/kg/min per 1 mL/hr
+  const perUnit = d.unitIsHr ? 'mcg/kg/hr' : 'mcg/kg/min';
   const steps=[
     `取 ${unitsNeeded.toFixed(2)} ${d.unitLabel}（= ${drugVolMl.toFixed(2)} mL）`,
     `加入 N/S${d.solvent==='D5W'?' 或 D5W':''} ${nsMl.toFixed(2)} mL`,
     `稀釋至總體積 ${totalVol} mL`,
     `最終濃度：${conc} mcg/mL`,
+    `1 mL/hr = ${perMlHr} ${perUnit}（體重 ${bw} kg）`,
     `流速範圍：${flowLow}–${flowHigh} mL/hr（依體重 ${bw} kg）`
   ];
   document.getElementById('civd-result').innerHTML=`
@@ -1121,6 +1127,8 @@ function calcCivd(vol) {
         <div class="cri"><label>藥物體積</label><div class="v">${drugVolMl.toFixed(2)} mL</div></div>
         <div class="cri"><label>N/S 加入</label><div class="v">${nsMl.toFixed(2)} mL</div></div>
         <div class="cri"><label>流速範圍</label><div class="v">${flowLow}–${flowHigh} mL/hr</div></div>
+        <div class="cri"><label>1 mL/hr =</label><div class="v">${perMlHr} ${perUnit}</div></div>
+        <div class="cri"><label>使用範圍</label><div class="v">${d.dLow}–${d.dHigh} ${perUnit}</div></div>
       </div>
       ${steps.map((s,i)=>`<div class="step"><b>${i+1}.</b>${s}</div>`).join('')}
     </div>`;
