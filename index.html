@@ -1104,8 +1104,9 @@ function calcCivd(vol) {
   const drugVolMl = unitsNeeded*d.drugMlPerUnit;
   const nsMl = totalVol-drugVolMl;
   const bw = parseFloat(document.getElementById('i-wt').value)||1;
-  const flowLow = (d.dLow*bw*60/conc).toFixed(2);
-  const flowHigh = (d.dHigh*bw*60/conc).toFixed(2);
+  // unitIsHr=true → dLow/dHigh 已是 mcg/kg/hr，不需 ×60
+  const flowLow = (d.unitIsHr ? d.dLow*bw/conc : d.dLow*bw*60/conc).toFixed(2);
+  const flowHigh = (d.unitIsHr ? d.dHigh*bw/conc : d.dHigh*bw*60/conc).toFixed(2);
   const steps=[
     `取 ${unitsNeeded.toFixed(2)} ${d.unitLabel}（= ${drugVolMl.toFixed(2)} mL）`,
     `加入 N/S${d.solvent==='D5W'?' 或 D5W':''} ${nsMl.toFixed(2)} mL`,
